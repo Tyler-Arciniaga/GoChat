@@ -6,14 +6,21 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 )
 
+type Message struct{
+	msg string
+	sender string
+}
+
 func main(){
-	if len(os.Args) < 2{
-		fmt.Println("Usage: go run main.go <port>")
+	if len(os.Args) < 3{
+		fmt.Println("Usage: go run main.go <port> <username>")
 		os.Exit(1)
 	}
 	port := fmt.Sprintf(":%s", os.Args[1])
+	username := os.Args[2]
 
 	ln, err := net.Listen("tcp", port)
 	if err != nil{
@@ -22,6 +29,12 @@ func main(){
 	}
 
 	fmt.Println("Listening on port", port)
+
+	//bChan := make(chan Message)
+
+	connMap := make(map[net.Conn]bool)
+	go handleConnMap(connMap)
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil{
@@ -29,11 +42,12 @@ func main(){
 			os.Exit(1)
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, username)
+		
 	}
 }
 
-func handleConnection(conn net.Conn){
+func handleConnection(conn net.Conn, username string){
 	defer conn.Close()
 
 	bufReader := bufio.NewReader(conn)
@@ -46,14 +60,14 @@ func handleConnection(conn net.Conn){
 			return //triggers conn.Close()
 		}
 
-		strReq := string(bytes)
-		if strReq == "/leave\n"{
-			break
+		strReq := strings.TrimSpace(string(bytes))
+		if strReq == "/leave"{
+			return //exit connection
 		}
-		fmt.Print("request: ", strReq)
+		res := fmt.Sprintf("[%s]: %s", username, strReq)
 
-		res := fmt.Sprint("you said: ", strReq)
-		fmt.Printf("server response: %s", res)
+		//res := fmt.Sprintln("you said: ", strReq)
+		//fmt.Printf("server response: %s\n", res)
 
 		_, err = conn.Write([]byte(res))
 		if err != nil{
@@ -61,5 +75,12 @@ func handleConnection(conn net.Conn){
 			return
 		}
 	}
+}
 
+func handleConnMap(connMap map[net.Conn]bool){
+	for{
+		select{
+
+		}
+	}
 }
