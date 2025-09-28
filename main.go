@@ -9,9 +9,14 @@ import (
 	"strings"
 )
 
+type Chatter struct{
+	Conn net.Conn
+	Name string
+} //should fields be exportable???
+
 func main(){
 	if len(os.Args) < 2{
-		fmt.Println("Usage: go run main.go <port> <username>")
+		fmt.Println("Usage: go run main.go <port>")
 		os.Exit(1)
 	}
 	port := fmt.Sprintf(":%s", os.Args[1])
@@ -25,10 +30,11 @@ func main(){
 	fmt.Println("Listening on port", port)
 
 	bChan := make(chan string)
-	uChan := make(chan net.Conn)
+	jChan := make(chan Chatter)
+	lChan := make(chan net.Conn)
 
-	connMap := make(map[net.Conn]bool)
-	go handleConnMap(connMap, bChan, uChan)
+	connMap := make(map[net.Conn]string)
+	go handleConnMap(connMap, bChan, jChan, lChan)
 
 	for {
 		conn, err := ln.Accept()
@@ -37,17 +43,39 @@ func main(){
 			os.Exit(1)
 		}
 
-		
-		uChan <- conn
-		go handleConnection(conn, bChan)
+		newChatter := Chatter{Conn: conn, Name: "?"}
+		jChan <- newChatter
+		go handleConnection(conn, bChan, jChan, lChan)
 		
 	}
 }
 
-func handleConnection(conn net.Conn,  broadcastChannel chan string){
+func handleConnection(conn net.Conn,  broadcastChannel chan string, joinChannel chan Chatter, leaveChannel chan net.Conn){
 	defer conn.Close()
-
 	bufReader := bufio.NewReader(conn)
+
+	var username string
+
+	for {
+		_, err := conn.Write([]byte("Enter name before entering chat room: "))
+		if err != nil{
+			fmt.Println("error prompting user for name:", err)
+		}
+		bytes, err := bufReader.ReadBytes(byte('\n'))
+		if err != nil{
+			if err != io.EOF{
+				fmt.Println("error reading in bytes from client", err)
+			}
+			return //triggers conn.Close()
+		}
+		username = strings.TrimSpace(string(bytes))
+		if len(username) > 0{
+			nameUpdated := Chatter{Conn: conn, Name: username}
+			joinChannel <- nameUpdated
+			break
+		}
+	}
+
 	for {
 		bytes, err := bufReader.ReadBytes(byte('\n'))
 		if err != nil{
@@ -59,9 +87,10 @@ func handleConnection(conn net.Conn,  broadcastChannel chan string){
 
 		strReq := strings.TrimSpace(string(bytes))
 		if strReq == "/leave"{
+			leaveChannel <- conn
 			return //exit connection
 		}
-		res := fmt.Sprintf("[some_user]: %s\n", strReq)
+		res := fmt.Sprintf("[%s]: %s\n", username, strReq)
 
 		//res := fmt.Sprintln("you said: ", strReq)
 		fmt.Printf("server response: %s\n", res)
@@ -71,19 +100,25 @@ func handleConnection(conn net.Conn,  broadcastChannel chan string){
 	}
 }
 
-func handleConnMap(connMap map[net.Conn]bool, broadcastChannel chan string, userChannel chan net.Conn){
+func handleConnMap(connMap map[net.Conn]string, broadcastChannel chan string, joinChannel chan Chatter, leaveChannel chan net.Conn){
 	for {
 		select{
 		case m := <- broadcastChannel:
-			for conn := range connMap{
+			for conn, name := range connMap{
+				if name == "?"{
+					continue
+				} //if user has not specified their name yet, do not present other user messages yet
 				_, err := conn.Write([]byte(m))
 				if err != nil{
 					fmt.Println("error writing response back through conn:", err)
 					return
 				}
 			}
-		case c := <- userChannel:
-			connMap[c] = true
+		case chatter := <- joinChannel:
+			connMap[chatter.Conn] = chatter.Name
+
+		case conn := <- leaveChannel:
+			delete(connMap, conn)
 		}
 	}
 }
