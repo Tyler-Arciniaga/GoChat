@@ -14,24 +14,36 @@ type Client struct{
 	MailBoxChan chan Message
 }
 
-func (c Client) RecieveMessages(){
+func (c Client) RecieveMessages(leaveChannel chan Client){
+	defer c.DisconnectFromHub(leaveChannel)
+
 	for m := range c.MailBoxChan{
-		_, err := c.Conn.Write([]byte(m.String()))
+		var msgString string
+		if m.Name == "Server"{
+			msgString = m.Msg
+		} else {
+			msgString = m.String()
+		}
+
+		_, err := c.Conn.Write([]byte(msgString))
 		if err != nil {
-			fmt.Printf("client with name %s had trouble printing incoming message: %s", c.Name, err)
+			fmt.Printf("client with name %s had trouble printing incoming message: %s\n", c.Name, err)
 			return
 		}
 	}
 }
 
 
-func (c Client) SendMessages(broadcastChannel chan Message){
+func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Client){
+	defer c.DisconnectFromHub(leaveChannel)
+
 	bufferedReader := bufio.NewReader(c.Conn)
 	for {
 		bytes, err := bufferedReader.ReadBytes(byte('\n'))
 		if err != nil {
 			if err != io.EOF{
-				fmt.Printf("client with name %s had trouble sending a message: %s", c.Name, err)
+				fmt.Printf("client with name %s had trouble sending a message: %s\n", c.Name, err)
+				return
 			}
 		}
 
@@ -39,4 +51,8 @@ func (c Client) SendMessages(broadcastChannel chan Message){
 		newMessage := Message{Name: c.Name, Msg: msgString}
 		broadcastChannel <- newMessage
 	}
+}
+
+func (c Client) DisconnectFromHub(leaveChannel chan Client){
+	leaveChannel <- c
 }

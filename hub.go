@@ -47,8 +47,14 @@ func (h Hub) HandleConnectionMap(){
 			h.BroadCastMessage(m)
 		case j := <- h.joinChannel:
 			h.connectionMap[j.Conn] = j
+			go func(){
+				h.broadcastChannel <- Message{Name: "Server", Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
+			}()
 		case l := <- h.leaveChannel:
 			delete(h.connectionMap, l.Conn)
+			go func(){
+				h.broadcastChannel <- Message{Name: "Server", Msg: fmt.Sprintf("%s has disconnected from chat server\n", l.Name)}
+			}()
 		}
 	}
 }
@@ -57,7 +63,7 @@ func (h Hub) BroadCastMessage(m Message){
 	for _, client := range h.connectionMap{
 		go func(){
 			client.MailBoxChan <- m
-		}() //TODO: check if this should be into a goroutine (logic: to not block broadcasting for slow/faulty client)
+		}()
 	}
 }
 
@@ -68,10 +74,15 @@ func (h Hub) HandleConnection(conn net.Conn){
 	}
 
 	h.joinChannel <- client
+	
+	go client.RecieveMessages(h.leaveChannel)
+	go client.SendMessages(h.broadcastChannel, h.leaveChannel)
 
-	go client.RecieveMessages()
-	go client.SendMessages(h.broadcastChannel)
-}
+	_, ok := h.connectionMap[conn]
+	for ok {
+		_, ok = h.connectionMap[conn]
+	}
+} //TODO: when to close connection?
 
 func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 	tempReader := bufio.NewReader(conn)
