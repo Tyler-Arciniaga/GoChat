@@ -2,13 +2,20 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 )
 
+type MessageType int
+
+const (
+	Broadcast MessageType = iota
+	Whisper
+)
 
 type Message struct{
+	Type MessageType
 	Name string
+	To string
 	Msg string
 }
 
@@ -26,7 +33,7 @@ func main(){
 	broadcastChan := make(chan Message)
 	joinChan := make(chan Client)
 	leaveChan := make(chan Client)
-	connMap := make(map[net.Conn]Client)
+	connMap := make(map[string]Client)
 
 	
 	hub := Hub{port: port, broadcastChannel: broadcastChan, joinChannel: joinChan, leaveChannel: leaveChan, connectionMap: connMap}

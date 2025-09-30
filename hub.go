@@ -15,7 +15,7 @@ type Hub struct {
 	broadcastChannel chan Message
 	joinChannel chan Client
 	leaveChannel chan Client
-	connectionMap map[net.Conn]Client
+	connectionMap map[string]Client
 }
 
 func (h Hub) Start(){
@@ -44,16 +44,20 @@ func (h Hub) HandleConnectionMap(){
 	for {
 		select{
 		case m := <- h.broadcastChannel:
-			h.BroadCastMessage(m)
+			if m.Type == Broadcast{
+				h.BroadCastMessage(m)
+			} else {
+				h.WhisperMessage(m)
+			}
 		case j := <- h.joinChannel:
-			h.connectionMap[j.Conn] = j
+			h.connectionMap[j.Name] = j
 			go func(){
-				h.broadcastChannel <- Message{Name: "Server", Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
+				h.broadcastChannel <- Message{Name: "", Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
 			}()
 		case l := <- h.leaveChannel:
-			delete(h.connectionMap, l.Conn)
+			delete(h.connectionMap, l.Name)
 			go func(){
-				h.broadcastChannel <- Message{Name: "Server", Msg: fmt.Sprintf("%s has disconnected from chat server\n", l.Name)}
+				h.broadcastChannel <- Message{Name: "", Msg: fmt.Sprintf("%s has disconnected from chat server\n", l.Name)}
 			}()
 		}
 	}
@@ -65,6 +69,13 @@ func (h Hub) BroadCastMessage(m Message){
 			client.MailBoxChan <- m
 		}()
 	}
+}
+
+func (h Hub) WhisperMessage(m Message){
+	dstClient := h.connectionMap[m.To]
+	go func(){
+		dstClient.MailBoxChan <- m
+	}()
 }
 
 func (h Hub) HandleConnection(conn net.Conn){
@@ -108,3 +119,4 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 		return Client{Conn: conn, Name: username, MailBoxChan: newMBC}, nil
 	}
 }
+

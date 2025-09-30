@@ -18,11 +18,9 @@ type Client struct{
 var once sync.Once
 
 func (c Client) RecieveMessages(leaveChannel chan Client){
-	//defer c.DisconnectFromHub(leaveChannel)
-
 	for m := range c.MailBoxChan{
 		var msgString string
-		if m.Name == "Server"{
+		if m.Name == ""{
 			msgString = m.Msg
 		} else {
 			msgString = m.String()
@@ -41,11 +39,9 @@ func (c Client) RecieveMessages(leaveChannel chan Client){
 
 
 func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Client){
-	//defer c.DisconnectFromHub(leaveChannel)
-
 	bufferedReader := bufio.NewReader(c.Conn)
 	for {
-		bytes, err := bufferedReader.ReadBytes(byte('\n'))
+		bytes, err := bufferedReader.ReadBytes(byte('\n')) //function call blocking until delimeter seen
 		if err != nil {
 			if err != io.EOF{
 				fmt.Printf("client with name %s had trouble sending a message: %s\n", c.Name, err)
@@ -62,20 +58,28 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 		}
 
 		if string(msgString[0]) == "/"{
-			c.HandleClientCommand(msgString[1:], leaveChannel)
-			return
-		}
-		newMessage := Message{Name: c.Name, Msg: msgString}
-		broadcastChannel <- newMessage
-	}
-}
+			parsedCommand := strings.Split(msgString[1:], " ")
+			//handle if parsed command len == 0
+			cmd := parsedCommand[0]
 
-func (c Client) HandleClientCommand(cmd string, leaveChannel chan Client){
-	switch cmd{
-	case "leave":
-		c.DisconnectFromHub(leaveChannel)
-	case "rename":
-		fmt.Println("renaming...") //TODO: flesh out rename input command
+			switch cmd{
+			case "leave":
+				c.DisconnectFromHub(leaveChannel)
+				return
+			case "whisper":
+				fmt.Println("whispering to user...") //TODO: flesh out whisper input command
+				go func(){
+					broadcastChannel <- Message{Type: Whisper, Name: c.Name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}
+				}()
+				continue
+			default:
+				continue
+			}	
+		}
+
+
+		newMessage := Message{Type: Broadcast, Name: c.Name, Msg: msgString}
+		broadcastChannel <- newMessage
 	}
 }
 
