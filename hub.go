@@ -77,12 +77,11 @@ func (h Hub) HandleConnection(conn net.Conn){
 	
 	go client.RecieveMessages(h.leaveChannel)
 	go client.SendMessages(h.broadcastChannel, h.leaveChannel)
-
-	_, ok := h.connectionMap[conn]
-	for ok {
-		_, ok = h.connectionMap[conn]
-	}
 } //TODO: when to close connection?
+
+func (h Hub) DisconnectClient(c Client){
+	h.leaveChannel <- c
+}
 
 func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 	tempReader := bufio.NewReader(conn)
