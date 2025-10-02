@@ -5,18 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
-
-type Hub struct {
-	port string
-	broadcastChannel chan Message
-	joinChannel chan Client
-	leaveChannel chan Client
-	connectionMap map[string]Client
-}
 
 func (h Hub) Start(){
 	fmt.Println("Listening on port", h.port)
@@ -27,7 +21,14 @@ func (h Hub) Start(){
 		os.Exit(1)
 	}
 
-	go h.HandleConnectionMap()
+	for i := range(3){
+		newRoom := Room{roomID: i, connectionMap: make(map[string]Client), 
+			messageChannel: make(chan Message), joinChannel: make(chan *Client), leaveChannel: make(chan Client)}
+		h.roomMap[i] = &newRoom
+		go newRoom.HandleConnectionMap()
+	}
+
+	go h.HandleClientMap()
 
 	for {
 		conn, err := ln.Accept()
@@ -40,75 +41,75 @@ func (h Hub) Start(){
 	}
 }
 
-func (h Hub) HandleConnectionMap(){
-	for {
+func (h Hub) HandleClientMap(){
+	for{
 		select{
-		case m := <- h.broadcastChannel:
-			if m.Type == Broadcast{
-				h.BroadCastMessage(m)
-			} else {
-				h.WhisperMessage(m)
-			}
 		case j := <- h.joinChannel:
-			h.connectionMap[strings.ToLower(j.Name)] = j
-			go func(){
-				h.broadcastChannel <- Message{Name: "", Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
-			}()
+			h.clientMap[strings.ToLower(j.Name)] = true
 		case l := <- h.leaveChannel:
-			delete(h.connectionMap, strings.ToLower(l.Name))
-			go func(){
-				h.broadcastChannel <- Message{Name: "", Msg: fmt.Sprintf("%s has disconnected from chat server\n", l.Name)}
-			}()
+			delete(h.clientMap, l.Name)
+			slog.Info(fmt.Sprintf("Client: %s has disconnected from Go Chat", l.Name))
 		}
 	}
 }
 
-func (h Hub) BroadCastMessage(m Message){
-	for _, client := range h.connectionMap{
-		go func(){
-			if m.Name == client.Name{
-				newMsg := m
-				newMsg.Name = "You"
-				client.MailBoxChan <- newMsg
-			} else{
-			client.MailBoxChan <- m
+func (h Hub) PromptRoomSelect(c Client) (*Room, error){
+	tempReader := bufio.NewReader(c.Conn)
+	for {
+		_, err := c.Conn.Write([]byte("Pick a chat room (0, 1, 2)"))
+		if err != nil {
+			return nil, fmt.Errorf("error writing to connection: %s", err)
+		}
+
+		bytes, err := tempReader.ReadBytes(byte('\n'))
+		if err != nil {
+			return nil, errors.New("error reading in bytes when prompting for room id")
+		}
+		
+		roomChoiceStr := strings.TrimSpace(string(bytes))
+		if len(roomChoiceStr) < 1{
+			continue
+		}
+		roomChoiceInt, err := strconv.Atoi(roomChoiceStr)
+		if err != nil {
+			return nil, errors.New("error parsing room choice into int type")
+		}
+
+		room, ok := h.roomMap[roomChoiceInt]
+		if !ok{
+			_, err := c.Conn.Write([]byte("Invalid room number, try again"))
+			if err != nil {
+				return nil, fmt.Errorf("error writing to connection: %s", err)
 			}
-		}()
+		}
+		return room, nil
 	}
 }
 
-func (h Hub) WhisperMessage(m Message){
-	//TODO: fix issue regarding trying to whisper to useer with a multi-word name (not sure how to know when to divide name with message)
-	dstClient, ok := h.connectionMap[strings.ToLower(m.To)]
-	srcClient := h.connectionMap[m.Name]
-	if !ok{
-		go func(){
-			srcClient.MailBoxChan <- Message{Name: "", Msg: fmt.Sprintf("Whisper message to: %s failed, perhaps check spelling\n", m.To)}
-		}()
-		return
-	}
-	go func(){
-		dstClient.MailBoxChan <- m
-	}()
-	
-	go func(){
-		newMessage := m
-		newMessage.Name = "You"
-		srcClient.MailBoxChan <- newMessage
-	}()
-}
 
 func (h Hub) HandleConnection(conn net.Conn){
 	client, err := h.CreateNewClient(conn)
 	if err != nil {
 		fmt.Println("error creating new client:", err)
+		_, err := conn.Write([]byte("error connecting to server try again"))
+		if err != nil {
+			slog.Error(fmt.Sprint("error writing error message to connection", err))
+		}
+		conn.Close()
+	}
+	
+	h.joinChannel <- client
+
+	room, err := h.PromptRoomSelect(client)
+	if err != nil{
+		h.leaveChannel <- client
+		return
 	}
 
-	h.joinChannel <- client
-	
-	go client.RecieveMessages(h.leaveChannel)
-	go client.SendMessages(h.broadcastChannel, h.leaveChannel)
-} //TODO: when to close connection?
+	room.joinChannel <- &client
+	go client.SendMessages()
+	go client.RecieveMessages()
+}
 
 func (h Hub) DisconnectClient(c Client){
 	h.leaveChannel <- c
@@ -135,7 +136,7 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 			continue
 		}
 
-		_, exists := h.connectionMap[strings.ToLower(username)]
+		_, exists := h.clientMap[strings.ToLower(username)]
 		if exists{
 			_, err = conn.Write([]byte("Name already taken in current chat room\n"))
 			if err != nil {
@@ -144,8 +145,8 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 			continue
 		}
 		
-		newMBC := make(chan Message)
-		return Client{Conn: conn, Name: username, MailBoxChan: newMBC}, nil
+		newMsgChan := make(chan Message)
+		return Client{Conn: conn, Name: username, MailBoxChan: newMsgChan, ActiveRoomChan: nil, ActiveLeaveChan: h.leaveChannel}, nil
 	}
 }
 

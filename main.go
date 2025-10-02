@@ -5,19 +5,6 @@ import (
 	"os"
 )
 
-type MessageType int
-
-const (
-	Broadcast MessageType = iota
-	Whisper
-)
-
-type Message struct{
-	Type MessageType
-	Name string
-	To string
-	Msg string
-}
 
 func (m Message) String() string{
 	return fmt.Sprintf("[%s]: %s\n", m.Name, m.Msg)
@@ -30,12 +17,12 @@ func main(){
 	}
 
 	port := fmt.Sprintf(":%s", os.Args[1])
-	broadcastChan := make(chan Message)
 	joinChan := make(chan Client)
 	leaveChan := make(chan Client)
-	connMap := make(map[string]Client)
+	roomMap := make(map[int]*Room)
+	clientMap := make(map[string]bool)
 
 	
-	hub := Hub{port: port, broadcastChannel: broadcastChan, joinChannel: joinChan, leaveChannel: leaveChan, connectionMap: connMap}
+	hub := Hub{port: port, joinChannel: joinChan, leaveChannel: leaveChan, roomMap: roomMap, clientMap: clientMap}
 	hub.Start()
 }
