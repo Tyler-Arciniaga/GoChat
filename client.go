@@ -67,7 +67,6 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 				c.DisconnectFromHub(leaveChannel)
 				return
 			case "whisper":
-				fmt.Println("whispering to user...") //TODO: flesh out whisper input command
 				go func(){
 					broadcastChannel <- Message{Type: Whisper, Name: c.Name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}
 				}()
@@ -80,6 +79,7 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 
 		newMessage := Message{Type: Broadcast, Name: c.Name, Msg: msgString}
 		broadcastChannel <- newMessage
+		
 	}
 }
 

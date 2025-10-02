@@ -50,12 +50,12 @@ func (h Hub) HandleConnectionMap(){
 				h.WhisperMessage(m)
 			}
 		case j := <- h.joinChannel:
-			h.connectionMap[j.Name] = j
+			h.connectionMap[strings.ToLower(j.Name)] = j
 			go func(){
 				h.broadcastChannel <- Message{Name: "", Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
 			}()
 		case l := <- h.leaveChannel:
-			delete(h.connectionMap, l.Name)
+			delete(h.connectionMap, strings.ToLower(l.Name))
 			go func(){
 				h.broadcastChannel <- Message{Name: "", Msg: fmt.Sprintf("%s has disconnected from chat server\n", l.Name)}
 			}()
@@ -66,15 +66,35 @@ func (h Hub) HandleConnectionMap(){
 func (h Hub) BroadCastMessage(m Message){
 	for _, client := range h.connectionMap{
 		go func(){
+			if m.Name == client.Name{
+				newMsg := m
+				newMsg.Name = "You"
+				client.MailBoxChan <- newMsg
+			} else{
 			client.MailBoxChan <- m
+			}
 		}()
 	}
 }
 
 func (h Hub) WhisperMessage(m Message){
-	dstClient := h.connectionMap[m.To]
+	//TODO: fix issue regarding trying to whisper to useer with a multi-word name (not sure how to know when to divide name with message)
+	dstClient, ok := h.connectionMap[strings.ToLower(m.To)]
+	srcClient := h.connectionMap[m.Name]
+	if !ok{
+		go func(){
+			srcClient.MailBoxChan <- Message{Name: "", Msg: fmt.Sprintf("Whisper message to: %s failed, perhaps check spelling\n", m.To)}
+		}()
+		return
+	}
 	go func(){
 		dstClient.MailBoxChan <- m
+	}()
+	
+	go func(){
+		newMessage := m
+		newMessage.Name = "You"
+		srcClient.MailBoxChan <- newMessage
 	}()
 }
 
@@ -112,6 +132,15 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 
 		username := strings.TrimSpace(string(bytes))
 		if len(username) < 1{
+			continue
+		}
+
+		_, exists := h.connectionMap[strings.ToLower(username)]
+		if exists{
+			_, err = conn.Write([]byte("Name already taken in current chat room\n"))
+			if err != nil {
+				return Client{}, errors.New("error requesting new name")
+			}
 			continue
 		}
 		
