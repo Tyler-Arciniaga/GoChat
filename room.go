@@ -16,8 +16,6 @@ func (r Room) HandleConnectionMap(){
 			}
 		case j := <- r.joinChannel:
 			r.connectionMap[strings.ToLower(j.Name)] = *j
-			j.ActiveRoomChan = r.messageChannel
-			j.ActiveLeaveChan = r.leaveChannel
 			go func(){
 				r.messageChannel <- Message{Type: Broadcast, Name: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
 			}()

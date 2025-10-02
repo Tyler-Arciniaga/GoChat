@@ -10,7 +10,7 @@ import (
 
 var once sync.Once
 
-func (c Client) RecieveMessages(){
+func (c Client) RecieveMessages(leaveChannel chan Client){
 	for m := range c.MailBoxChan{
 		var msgString string
 		if m.Name == ""{
@@ -23,7 +23,7 @@ func (c Client) RecieveMessages(){
 		if err != nil {
 			fmt.Printf("client with name %s had trouble printing incoming message: %s\n", c.Name, err)
 			once.Do(func(){
-				c.DisconnectFromHub(c.ActiveLeaveChan)
+				c.DisconnectFromHub(leaveChannel)
 			})
 			return
 		}
@@ -31,8 +31,7 @@ func (c Client) RecieveMessages(){
 }
 
 
-func (c Client) SendMessages(){
-	fmt.Println("herexxx")
+func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Client){
 	bufferedReader := bufio.NewReader(c.Conn)
 	for {
 		bytes, err := bufferedReader.ReadBytes(byte('\n')) //function call blocking until delimeter seen
@@ -40,7 +39,7 @@ func (c Client) SendMessages(){
 			if err != io.EOF{
 				fmt.Printf("client with name %s had trouble sending a message: %s\n", c.Name, err)
 				once.Do(func(){
-					c.DisconnectFromHub(c.ActiveLeaveChan)
+					c.DisconnectFromHub(leaveChannel)
 				})
 				return
 			}
@@ -57,11 +56,11 @@ func (c Client) SendMessages(){
 
 			switch cmd{
 			case "leave":
-				c.DisconnectFromHub(c.ActiveLeaveChan)
+				c.DisconnectFromHub(leaveChannel)
 				return
 			case "whisper":
 				go func(){
-					c.ActiveRoomChan <- Message{Type: Whisper, Name: c.Name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}
+					broadcastChannel <- Message{Type: Whisper, Name: c.Name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}
 				}()
 				continue
 			default:
@@ -71,10 +70,9 @@ func (c Client) SendMessages(){
 
 
 		newMessage := Message{Type: Broadcast, Name: c.Name, Msg: msgString}
-		fmt.Println("xyxxyxyx")
-		fmt.Println(c.ActiveRoomChan)
-		c.ActiveRoomChan <- newMessage
 		
+		broadcastChannel <- newMessage //TODO: writing to nil chan when a user first enters a room
+		fmt.Println("made it past")
 	}
 }
 

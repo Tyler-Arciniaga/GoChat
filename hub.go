@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func (h Hub) Start(){
@@ -56,7 +57,7 @@ func (h Hub) HandleClientMap(){
 func (h Hub) PromptRoomSelect(c Client) (*Room, error){
 	tempReader := bufio.NewReader(c.Conn)
 	for {
-		_, err := c.Conn.Write([]byte("Pick a chat room (0, 1, 2)"))
+		_, err := c.Conn.Write([]byte("Pick a chat room (0, 1, 2): "))
 		if err != nil {
 			return nil, fmt.Errorf("error writing to connection: %s", err)
 		}
@@ -100,15 +101,32 @@ func (h Hub) HandleConnection(conn net.Conn){
 	
 	h.joinChannel <- client
 
-	room, err := h.PromptRoomSelect(client)
-	if err != nil{
-		h.leaveChannel <- client
-		return
-	}
+	for {
+		room, err := h.PromptRoomSelect(client)
+		if err != nil{
+			fmt.Println("help")
+			slog.Error("error with room selection, booting client")
+			h.leaveChannel <- client
+			return
+		}
+		fmt.Println("1")
+		room.joinChannel <- &client
+		fmt.Println("2")
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func(){
+			defer wg.Done()
+			client.SendMessages(room.messageChannel, room.leaveChannel)
+		}()
 
-	room.joinChannel <- &client
-	go client.SendMessages()
-	go client.RecieveMessages()
+		go func(){
+			defer wg.Done()
+			client.RecieveMessages(room.leaveChannel)
+		}()
+
+		wg.Wait()
+	}
+	
 }
 
 func (h Hub) DisconnectClient(c Client){
@@ -146,7 +164,13 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 		}
 		
 		newMsgChan := make(chan Message)
-		return Client{Conn: conn, Name: username, MailBoxChan: newMsgChan, ActiveRoomChan: nil, ActiveLeaveChan: h.leaveChannel}, nil
+		return Client{
+			Conn: conn, 
+			Name: username, 
+			MailBoxChan: newMsgChan, 
+			ActiveRoomChan: nil, 
+			ActiveLeaveChan: h.leaveChannel,
+			}, nil
 	}
 }
 
