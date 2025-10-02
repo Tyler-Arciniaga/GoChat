@@ -12,6 +12,10 @@ var once sync.Once
 
 func (c Client) RecieveMessages(leaveChannel chan Client){
 	for m := range c.MailBoxChan{
+		if m.Type == Leave{
+			return
+		}
+
 		var msgString string
 		if m.Name == ""{
 			msgString = m.Msg
@@ -21,7 +25,7 @@ func (c Client) RecieveMessages(leaveChannel chan Client){
 
 		_, err := c.Conn.Write([]byte(msgString))
 		if err != nil {
-			fmt.Printf("client with name %s had trouble printing incoming message: %s\n", c.Name, err)
+			fmt.Printf("client with name %s had trouble printing incoming message, err: %s\n", c.Name, err)
 			once.Do(func(){
 				c.DisconnectFromHub(leaveChannel)
 			})
@@ -71,14 +75,11 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 
 		newMessage := Message{Type: Broadcast, Name: c.Name, Msg: msgString}
 		
-		broadcastChannel <- newMessage //TODO: writing to nil chan when a user first enters a room
-		fmt.Println("made it past")
+		broadcastChannel <- newMessage
 	}
 }
 
 //TODO: update so that client only leave current chat room not entire chat server (can rejoin a different room, etc)
 func (c Client) DisconnectFromHub(leaveChannel chan Client){
-	c.Conn.Close()
-	close(c.MailBoxChan)
 	leaveChannel <- c
 }

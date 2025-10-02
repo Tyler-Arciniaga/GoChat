@@ -57,7 +57,7 @@ func (h Hub) HandleClientMap(){
 func (h Hub) PromptRoomSelect(c Client) (*Room, error){
 	tempReader := bufio.NewReader(c.Conn)
 	for {
-		_, err := c.Conn.Write([]byte("Pick a chat room (0, 1, 2): "))
+		_, err := c.Conn.Write([]byte("Pick a chat room (-1 to disconnect from sever):\n1\n2\n3\n-> "))
 		if err != nil {
 			return nil, fmt.Errorf("error writing to connection: %s", err)
 		}
@@ -68,20 +68,27 @@ func (h Hub) PromptRoomSelect(c Client) (*Room, error){
 		}
 		
 		roomChoiceStr := strings.TrimSpace(string(bytes))
+		if roomChoiceStr == "-1"{
+			c.Conn.Write([]byte("Come back soon :)\n"))
+			h.leaveChannel <- c
+			c.Conn.Close()
+			return nil, nil
+		}
 		if len(roomChoiceStr) < 1{
 			continue
 		}
 		roomChoiceInt, err := strconv.Atoi(roomChoiceStr)
 		if err != nil {
-			return nil, errors.New("error parsing room choice into int type")
+			continue
 		}
 
 		room, ok := h.roomMap[roomChoiceInt]
 		if !ok{
-			_, err := c.Conn.Write([]byte("Invalid room number, try again"))
+			_, err := c.Conn.Write([]byte("Invalid room number, try again\n"))
 			if err != nil {
 				return nil, fmt.Errorf("error writing to connection: %s", err)
 			}
+			continue
 		}
 		return room, nil
 	}
@@ -97,23 +104,27 @@ func (h Hub) HandleConnection(conn net.Conn){
 			slog.Error(fmt.Sprint("error writing error message to connection", err))
 		}
 		conn.Close()
+		return
 	}
 	
 	h.joinChannel <- client
 
 	for {
 		room, err := h.PromptRoomSelect(client)
+		if room == nil{
+			return
+		}// user has disconnected from chat server with /leave command
 		if err != nil{
-			fmt.Println("help")
 			slog.Error("error with room selection, booting client")
 			h.leaveChannel <- client
 			return
 		}
-		fmt.Println("1")
+
 		room.joinChannel <- &client
-		fmt.Println("2")
+
 		var wg sync.WaitGroup
 		wg.Add(2)
+
 		go func(){
 			defer wg.Done()
 			client.SendMessages(room.messageChannel, room.leaveChannel)
@@ -168,8 +179,6 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 			Conn: conn, 
 			Name: username, 
 			MailBoxChan: newMsgChan, 
-			ActiveRoomChan: nil, 
-			ActiveLeaveChan: h.leaveChannel,
 			}, nil
 	}
 }

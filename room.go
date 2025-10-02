@@ -17,12 +17,15 @@ func (r Room) HandleConnectionMap(){
 		case j := <- r.joinChannel:
 			r.connectionMap[strings.ToLower(j.Name)] = *j
 			go func(){
-				r.messageChannel <- Message{Type: Broadcast, Name: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has joined the chat server\n", j.Name)}
+				r.messageChannel <- Message{Type: Broadcast, Name: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has joined this chat room", j.Name)}
 			}()
 		case l := <- r.leaveChannel:
 			delete(r.connectionMap, strings.ToLower(l.Name))
 			go func(){
-				r.messageChannel <- Message{Type: Broadcast, Name: "", Msg: fmt.Sprintf("%s has disconnected from chat server\n", l.Name)}
+				l.MailBoxChan <- Message{Type: Leave}
+			}()
+			go func(){
+				r.messageChannel <- Message{Type: Broadcast, Name: "", Msg: fmt.Sprintf("%s has disconnected from this chat room\n", l.Name)}
 			}()
 		}
 	}

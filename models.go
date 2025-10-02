@@ -7,6 +7,7 @@ type MessageType int
 const (
 	Broadcast MessageType = iota
 	Whisper
+	Leave
 )
 
 type Message struct{
@@ -28,8 +29,6 @@ type Client struct{
 	Conn net.Conn
 	Name string
 	MailBoxChan chan Message
-	ActiveRoomChan chan Message
-	ActiveLeaveChan chan Client
 }
 
 type Room struct{
