@@ -20,7 +20,7 @@ func main(){
 	joinChan := make(chan Client)
 	leaveChan := make(chan Client)
 	roomMap := make(map[int]*Room)
-	clientMap := make(map[string]bool)
+	clientMap := make(map[string]Client)
 
 	
 	hub := Hub{port: port, joinChannel: joinChan, leaveChannel: leaveChan, roomMap: roomMap, clientMap: clientMap}

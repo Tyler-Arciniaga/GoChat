@@ -79,7 +79,6 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 	}
 }
 
-//TODO: update so that client only leave current chat room not entire chat server (can rejoin a different room, etc)
 func (c Client) DisconnectFromHub(leaveChannel chan Client){
 	leaveChannel <- c
 }

@@ -22,7 +22,7 @@ type Hub struct {
 	joinChannel chan Client
 	leaveChannel chan Client
 	roomMap map[int]*Room
-	clientMap map[string]bool
+	clientMap map[string]Client
 }
 
 type Client struct{

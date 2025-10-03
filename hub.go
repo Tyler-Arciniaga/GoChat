@@ -14,6 +14,12 @@ import (
 )
 
 func (h Hub) Start(){
+	defer func(){
+		if v := recover(); v != nil{
+			slog.Error("Unrecoverable panic detected, shutting down chat server now.", "panic", v)
+			h.CleanUpHub()
+		}
+	}()
 	fmt.Println("Listening on port", h.port)
 
 	ln, err := net.Listen("tcp", h.port)
@@ -46,9 +52,9 @@ func (h Hub) HandleClientMap(){
 	for{
 		select{
 		case j := <- h.joinChannel:
-			h.clientMap[strings.ToLower(j.Name)] = true
+			h.clientMap[strings.ToLower(j.Name)] = j
 		case l := <- h.leaveChannel:
-			delete(h.clientMap, l.Name)
+			delete(h.clientMap, strings.ToLower(l.Name))
 			slog.Info(fmt.Sprintf("Client: %s has disconnected from Go Chat", l.Name))
 		}
 	}
@@ -57,7 +63,7 @@ func (h Hub) HandleClientMap(){
 func (h Hub) PromptRoomSelect(c Client) (*Room, error){
 	tempReader := bufio.NewReader(c.Conn)
 	for {
-		_, err := c.Conn.Write([]byte("Pick a chat room (-1 to disconnect from sever):\n1\n2\n3\n-> "))
+		_, err := c.Conn.Write([]byte("Pick a chat room (-1 to disconnect from sever):\n0\n1\n2\n-> ")) //TODO: refactor so that room numbers are not hardcoded
 		if err != nil {
 			return nil, fmt.Errorf("error writing to connection: %s", err)
 		}
@@ -93,7 +99,6 @@ func (h Hub) PromptRoomSelect(c Client) (*Room, error){
 		return room, nil
 	}
 }
-
 
 func (h Hub) HandleConnection(conn net.Conn){
 	client, err := h.CreateNewClient(conn)
@@ -181,5 +186,20 @@ func (h Hub) CreateNewClient(conn net.Conn) (Client, error){
 			MailBoxChan: newMsgChan, 
 			}, nil
 	}
+}
+
+func (h Hub) CleanUpHub(){
+	for _, client := range h.clientMap{
+		client.Conn.Close()
+	}
+
+	if h.joinChannel != nil {
+		close(h.joinChannel)
+	}
+	if h.leaveChannel != nil {
+		close(h.leaveChannel)
+	}
+
+	os.Exit(0)
 }
 
