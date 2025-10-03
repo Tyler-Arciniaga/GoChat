@@ -30,9 +30,9 @@ func (h Hub) Start(){
 
 	for i := range(3){
 		newRoom := Room{roomID: i, connectionMap: make(map[string]Client), 
-			messageChannel: make(chan Message), joinChannel: make(chan *Client), leaveChannel: make(chan Client)}
+			messageChannel: make(chan Message), joinChannel: make(chan *Client), leaveChannel: make(chan LeaveSignal)}
 		h.roomMap[i] = &newRoom
-		go newRoom.HandleConnectionMap()
+		go newRoom.HandleConnectionMap(h.leaveChannel)
 	}
 
 	go h.HandleClientMap()

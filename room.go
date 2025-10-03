@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (r Room) HandleConnectionMap(){
+func (r Room) HandleConnectionMap(hubLeaveChannel chan Client){
 	for {
 		select{
 		case m := <- r.messageChannel:
@@ -20,13 +20,23 @@ func (r Room) HandleConnectionMap(){
 				r.messageChannel <- Message{Type: Broadcast, Name: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has joined this chat room", j.Name)}
 			}()
 		case l := <- r.leaveChannel:
-			delete(r.connectionMap, strings.ToLower(l.Name))
+			delete(r.connectionMap, strings.ToLower(l.Client.Name))
+
+			if l.LeaveType == Graceful{
+				go func(){
+					l.Client.MailBoxChan <- Message{Type: Leave}
+				}()
+			}
+
 			go func(){
-				l.MailBoxChan <- Message{Type: Leave}
+				r.messageChannel <- Message{Type: Broadcast, Name: "", Msg: fmt.Sprintf("%s has disconnected from this chat room\n", l.Client.Name)}
 			}()
-			go func(){
-				r.messageChannel <- Message{Type: Broadcast, Name: "", Msg: fmt.Sprintf("%s has disconnected from this chat room\n", l.Name)}
-			}()
+
+			if l.LeaveType == Interruption{
+				go func(){
+					hubLeaveChannel <- l.Client
+				}()
+			}
 		}
 	}
 }

@@ -10,7 +10,7 @@ import (
 
 var once sync.Once
 
-func (c Client) RecieveMessages(leaveChannel chan Client){
+func (c Client) RecieveMessages(leaveChannel chan LeaveSignal){
 	for m := range c.MailBoxChan{
 		if m.Type == Leave{
 			return
@@ -27,7 +27,7 @@ func (c Client) RecieveMessages(leaveChannel chan Client){
 		if err != nil {
 			fmt.Printf("client with name %s had trouble printing incoming message, err: %s\n", c.Name, err)
 			once.Do(func(){
-				c.DisconnectFromHub(leaveChannel)
+				c.HandleDisconnect(leaveChannel, LeaveSignal{LeaveType: Interruption, Client: c})
 			})
 			return
 		}
@@ -35,7 +35,7 @@ func (c Client) RecieveMessages(leaveChannel chan Client){
 }
 
 
-func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Client){
+func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan LeaveSignal){
 	bufferedReader := bufio.NewReader(c.Conn)
 	for {
 		bytes, err := bufferedReader.ReadBytes(byte('\n')) //function call blocking until delimeter seen
@@ -43,7 +43,7 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 			if err != io.EOF{
 				fmt.Printf("client with name %s had trouble sending a message: %s\n", c.Name, err)
 				once.Do(func(){
-					c.DisconnectFromHub(leaveChannel)
+					c.HandleDisconnect(leaveChannel, LeaveSignal{LeaveType: Interruption, Client: c})
 				})
 				return
 			}
@@ -60,7 +60,7 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 
 			switch cmd{
 			case "leave":
-				c.DisconnectFromHub(leaveChannel)
+				c.HandleDisconnect(leaveChannel, LeaveSignal{LeaveType: Graceful, Client: c})
 				return
 			case "whisper":
 				go func(){
@@ -79,6 +79,6 @@ func (c Client) SendMessages(broadcastChannel chan Message, leaveChannel chan Cl
 	}
 }
 
-func (c Client) DisconnectFromHub(leaveChannel chan Client){
-	leaveChannel <- c
+func (c Client) HandleDisconnect(l chan LeaveSignal, s LeaveSignal){
+	l <- s
 }

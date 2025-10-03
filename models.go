@@ -3,11 +3,16 @@ package main
 import "net"
 
 type MessageType int
-
 const (
 	Broadcast MessageType = iota
 	Whisper
 	Leave
+)
+
+type DisconnectionType int 
+const (
+	Interruption DisconnectionType = iota
+	Graceful
 )
 
 type Message struct{
@@ -31,10 +36,15 @@ type Client struct{
 	MailBoxChan chan Message
 }
 
+type LeaveSignal struct{
+	LeaveType DisconnectionType
+	Client Client
+}
+
 type Room struct{
 	roomID int
 	connectionMap map[string]Client
 	messageChannel chan Message
 	joinChannel chan *Client
-	leaveChannel chan Client
+	leaveChannel chan LeaveSignal
 }
