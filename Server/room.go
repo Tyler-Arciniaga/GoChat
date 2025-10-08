@@ -1,13 +1,20 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	common "go-chat/Common"
 )
 
+func (r Room) StartRoom() {
+	go r.RouteRawMessages()
+	go r.HandleAdminSignals()
+	go r.HandleChatMessages()
+}
+
 func (r Room) RouteRawMessages() {
 	for raw := range r.messageChannel {
-		switch raw.MessageType {
+		switch raw.Type {
 		case common.Broadcast:
 			go func() {
 				r.broadcastChannel <- raw
@@ -42,7 +49,9 @@ func (r Room) HandleAdminSignals() {
 	}
 }
 
-func (r Room) AdmitUser(s AdminSignal) {} //TODO
+func (r Room) AdmitUser(s AdminSignal) {
+	r.chatterMap[s.message.Name] = s.conn
+} //TODO
 
 func (r Room) RemoveUser(s AdminSignal) {} //TODO
 
@@ -62,7 +71,16 @@ func (r Room) HandleChatMessages() {
 	}
 }
 
-func (r Room) BroadcastMessage(m common.Message) {} //TODO
+func (r Room) BroadcastMessage(m common.Message) {
+	fmt.Println("broadcasting message:", m)
+	b, _ := json.Marshal(m)
+	for _, conn := range r.chatterMap {
+		fmt.Println(conn)
+		go func() {
+			conn.Write(b)
+		}()
+	}
+} //TODO
 
 func (r Room) WhisperMessage(m common.Message) {} //TODO
 

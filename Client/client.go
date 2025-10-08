@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"go-chat/common"
 	"log/slog"
 	"net"
 	"os"
@@ -44,7 +46,9 @@ func (c Client) SendMessages() {
 		}
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			fmt.Println(string(line))
+			newMessage := common.Message{Type: common.Broadcast, Name: c.name, Msg: string(line)}
+			marshalledMsg, _ := json.Marshal(newMessage)
+			c.conn.Write(marshalledMsg)
 		}
 	}
 }

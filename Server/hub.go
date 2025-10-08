@@ -38,8 +38,8 @@ func (h Hub) Start() {
 		}
 
 		h.roomMap[i] = &newRoom
-		go newRoom.RouteRawMessages()
-		go newRoom.HandleAdminSignals()
+
+		newRoom.StartRoom()
 	}
 
 	//go h.HandleClientMap()
@@ -69,27 +69,29 @@ func (h Hub) HandleNewClientConnection(conn net.Conn) {
 	go func() {
 		room.joinChannel <- joinSignal
 	}()
+
+	h.clientRoomMap[conn] = room
 }
 
 func (h Hub) RecieveClientMessages(conn net.Conn) {
+	fmt.Println("started recieving client messages...")
 	buf := make([]byte, 1024)
 	var message common.Message
+	room := h.clientRoomMap[conn]
 	for {
-		_, err := conn.Read(buf)
+		n, err := conn.Read(buf)
 		if err != nil {
 			slog.Error("error reading in client message", "error", err)
 			return
 		}
 
-		err = json.Unmarshal(buf, &message)
+		fmt.Println(string(buf[:n]))
+		err = json.Unmarshal(buf[:n], &message)
 		if err != nil {
 			slog.Error("error unmarshalling incoming message bytes", "error", err)
 		}
 
-		fmt.Println(message)
-
-		//TODO: rest of logic
-
+		room.messageChannel <- message
 	}
 }
 

@@ -16,12 +16,12 @@ const (
 )
 
 type Message struct {
-	MessageType MessageType `json:"message_type"`
-	Name        string      `json:"name"`
-	To          string      `json:"to"` //empty string unless /whisper command evoked
-	Msg         string      `json:"msg"`
-	FileMeta    *FileHeader `json:"file_meta"`
-	Data        []byte      `json:"data"`
+	Type     MessageType `json:"message_type"`
+	Name     string      `json:"name"`
+	To       string      `json:"to"` //empty string unless /whisper command evoked
+	Msg      string      `json:"msg"`
+	FileMeta *FileHeader `json:"file_meta"`
+	Data     []byte      `json:"data"`
 }
 
 func (m Message) String() string {
