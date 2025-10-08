@@ -11,6 +11,7 @@ type Hub struct {
 	joinChannel   chan net.Conn
 	leaveChannel  chan net.Conn
 	clientRoomMap map[net.Conn]*Room
+	roomMap       map[int]*Room
 }
 
 type Room struct {

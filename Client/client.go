@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 )
 
 //var once sync.Once
@@ -16,18 +18,15 @@ func (c Client) StartClient() {
 	}
 	c.conn = conn
 	fmt.Println("connection to tcp server set!")
-	fmt.Println(conn)
+	defer conn.Close()
 
-	c.HandleIncomingMessages()
-	//go c.RecieveMessages()
-	//go c.SendMessages()
+	go c.HandleIncomingMessages()
+	c.SendMessages()
 }
 
 func (c Client) HandleIncomingMessages() {
 	buf := make([]byte, 1024)
-	fmt.Println(c.conn)
 	for {
-		fmt.Println("here")
 		_, err := c.conn.Read(buf)
 		if err != nil {
 			slog.Error("client conn read error", "err", err)
@@ -37,7 +36,18 @@ func (c Client) HandleIncomingMessages() {
 	}
 }
 
-func (c Client) SendMessages() {}
+func (c Client) SendMessages() {
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		if err := scanner.Err(); err != nil {
+			fmt.Println(err)
+		}
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			fmt.Println(string(line))
+		}
+	}
+}
 
 // func (c Client) RecieveMessages() {
 // 	for m := range c.MailBoxChan {

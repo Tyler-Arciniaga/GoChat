@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	common "go-chat/Common"
 	"log/slog"
@@ -36,6 +37,7 @@ func (h Hub) Start() {
 			whisperChannel:   make(chan common.Message),
 		}
 
+		h.roomMap[i] = &newRoom
 		go newRoom.RouteRawMessages()
 		go newRoom.HandleAdminSignals()
 	}
@@ -48,19 +50,55 @@ func (h Hub) Start() {
 			fmt.Println("error accepting new user connection", err)
 			continue
 		}
-		fmt.Println(conn)
-		go h.HandleIncomingClientMessages(conn)
+		slog.Info("new client connection established", "conn", conn)
 
-		test(conn)
+		h.HandleNewClientConnection(conn)
+
+		go h.RecieveClientMessages(conn)
 	}
 }
 
-func (h Hub) HandleIncomingClientMessages(conn net.Conn) {}
-
-func test(conn net.Conn) {
-	for {
-		conn.Write([]byte("xyzyzxjedflkajsdk"))
+func (h Hub) HandleNewClientConnection(conn net.Conn) {
+	room, err := h.HandleRoomSelect(conn)
+	if err != nil {
+		slog.Error("error selecting room", "error", err)
+		return
 	}
+
+	joinSignal := AdminSignal{conn: conn}
+	go func() {
+		room.joinChannel <- joinSignal
+	}()
+}
+
+func (h Hub) RecieveClientMessages(conn net.Conn) {
+	buf := make([]byte, 1024)
+	var message common.Message
+	for {
+		_, err := conn.Read(buf)
+		if err != nil {
+			slog.Error("error reading in client message", "error", err)
+			return
+		}
+
+		err = json.Unmarshal(buf, &message)
+		if err != nil {
+			slog.Error("error unmarshalling incoming message bytes", "error", err)
+		}
+
+		fmt.Println(message)
+
+		//TODO: rest of logic
+
+	}
+}
+
+func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
+	fmt.Println("handle room selection here...") //TODO
+
+	//room selection logic...
+	selectedRoom := h.roomMap[0]
+	return selectedRoom, nil
 }
 
 // func (h Hub) HandleClientMap() {

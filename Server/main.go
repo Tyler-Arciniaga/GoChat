@@ -17,6 +17,6 @@ func main() {
 	leaveChan := make(chan net.Conn)
 	clientRoomMap := make(map[net.Conn]*Room)
 
-	hub := Hub{port: port, numRooms: 0, joinChannel: joinChan, leaveChannel: leaveChan, clientRoomMap: clientRoomMap}
+	hub := Hub{port: port, numRooms: 0, joinChannel: joinChan, leaveChannel: leaveChan, clientRoomMap: clientRoomMap, roomMap: make(map[int]*Room)}
 	hub.Start()
 }
