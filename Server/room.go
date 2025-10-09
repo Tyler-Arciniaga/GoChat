@@ -49,11 +49,11 @@ func (r Room) HandleAdminSignals() {
 	}
 }
 
-func (r Room) AdmitUser(s AdminSignal) {
-	r.chatterMap[s.message.Name] = s.conn
+func (r Room) AdmitUser(s ClientModel) {
+	r.chatterMap[s.name] = s.conn
 } //TODO
 
-func (r Room) RemoveUser(s AdminSignal) {} //TODO
+func (r Room) RemoveUser(s ClientModel) {} //TODO
 
 func (r Room) HandleChatMessages() {
 	for {
@@ -75,7 +75,6 @@ func (r Room) BroadcastMessage(m common.Message) {
 	fmt.Println("broadcasting message:", m)
 	b, _ := json.Marshal(m)
 	for _, conn := range r.chatterMap {
-		fmt.Println(conn)
 		go func() {
 			conn.Write(b)
 		}()

@@ -31,8 +31,8 @@ func (h Hub) Start() {
 			roomID:           i,
 			chatterMap:       make(map[string]net.Conn),
 			messageChannel:   make(chan common.Message),
-			joinChannel:      make(chan AdminSignal),
-			leaveChannel:     make(chan AdminSignal),
+			joinChannel:      make(chan ClientModel),
+			leaveChannel:     make(chan ClientModel),
 			broadcastChannel: make(chan common.Message),
 			whisperChannel:   make(chan common.Message),
 		}
@@ -41,8 +41,6 @@ func (h Hub) Start() {
 
 		newRoom.StartRoom()
 	}
-
-	//go h.HandleClientMap()
 
 	for {
 		conn, err := ln.Accept()
@@ -59,18 +57,35 @@ func (h Hub) Start() {
 }
 
 func (h Hub) HandleNewClientConnection(conn net.Conn) {
+	clientName := h.HandleClientInfoMessage(conn) //blocking call
 	room, err := h.HandleRoomSelect(conn)
 	if err != nil {
 		slog.Error("error selecting room", "error", err)
 		return
 	}
 
-	joinSignal := AdminSignal{conn: conn}
+	joinSignal := ClientModel{name: clientName, conn: conn}
 	go func() {
 		room.joinChannel <- joinSignal
 	}()
 
 	h.clientRoomMap[conn] = room
+}
+
+func (h Hub) HandleClientInfoMessage(conn net.Conn) string {
+	buf := make([]byte, 1024)
+	var msg common.Message
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			slog.Error("client conn read error", "err", err)
+		}
+
+		json.Unmarshal(buf[:n], &msg)
+		if msg.Type == common.UserData {
+			return msg.Name
+		} //TODO: handle avoiding duplicate names
+	}
 }
 
 func (h Hub) RecieveClientMessages(conn net.Conn) {

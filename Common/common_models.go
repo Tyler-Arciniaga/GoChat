@@ -9,6 +9,7 @@ type MessageType int
 const (
 	Broadcast MessageType = iota
 	Whisper
+	UserData
 	Join
 	Leave
 	FileMetaData //announces new file metadata

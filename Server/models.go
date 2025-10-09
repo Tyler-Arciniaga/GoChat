@@ -18,13 +18,13 @@ type Room struct {
 	roomID           int
 	chatterMap       map[string]net.Conn
 	messageChannel   chan common.Message //recieves raw unparsed messages from hub, routes to appropriate internal channel
-	joinChannel      chan AdminSignal
-	leaveChannel     chan AdminSignal
+	joinChannel      chan ClientModel
+	leaveChannel     chan ClientModel
 	broadcastChannel chan common.Message
 	whisperChannel   chan common.Message
 }
 
-type AdminSignal struct {
-	message common.Message
-	conn    net.Conn
+type ClientModel struct {
+	name string
+	conn net.Conn
 }

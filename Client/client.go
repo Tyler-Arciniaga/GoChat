@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"go-chat/common"
+	common "go-chat/Common"
 	"log/slog"
 	"net"
 	"os"
@@ -22,8 +22,20 @@ func (c Client) StartClient() {
 	fmt.Println("connection to tcp server set!")
 	defer conn.Close()
 
+	c.SendClientInfo()
+
 	go c.HandleIncomingMessages()
 	c.SendMessages()
+}
+
+func (c Client) SendClientInfo() {
+	userInfoMsg := common.Message{Type: common.UserData, Name: c.name}
+	bytes, err := json.Marshal(userInfoMsg)
+	if err != nil {
+		slog.Error("error marshalling user info message")
+	}
+
+	c.conn.Write(bytes)
 }
 
 func (c Client) HandleIncomingMessages() {
@@ -42,12 +54,18 @@ func (c Client) SendMessages() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		if err := scanner.Err(); err != nil {
-			fmt.Println(err)
+			slog.Error("error reading in input from stdin", "error", err)
+			return
 		}
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			newMessage := common.Message{Type: common.Broadcast, Name: c.name, Msg: string(line)}
-			marshalledMsg, _ := json.Marshal(newMessage)
+			marshalledMsg, err := json.Marshal(newMessage)
+			if err != nil {
+				slog.Error("error marshaling message data", "error", err)
+				return
+			}
+
 			c.conn.Write(marshalledMsg)
 		}
 	}
