@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 )
 
 func (h Hub) Start() {
@@ -83,13 +84,12 @@ func (h Hub) HandleClientInfoMessage(conn net.Conn) string {
 
 		json.Unmarshal(buf[:n], &msg)
 		if msg.Type == common.UserData {
-			return msg.Name
+			return msg.From
 		} //TODO: handle avoiding duplicate names
 	}
 }
 
 func (h Hub) RecieveClientMessages(conn net.Conn) {
-	fmt.Println("started recieving client messages...")
 	buf := make([]byte, 1024)
 	var message common.Message
 	room := h.clientRoomMap[conn]
@@ -111,11 +111,44 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 }
 
 func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
-	fmt.Println("handle room selection here...") //TODO
+	roomSelectMsg := common.Message{Type: common.ServerMessage, From: "Server", Msg: "Select a chat room 0, 1, 2 (select -1 to leave server)"}
+	invalidChoiceMsg := common.Message{Type: common.ServerMessage, From: "Server", Msg: "Invalid choice, try again"}
 
-	//room selection logic...
-	selectedRoom := h.roomMap[0]
-	return selectedRoom, nil
+	roomChoiceBytes, err := json.Marshal(roomSelectMsg)
+	invalidChoiceBytes, err2 := json.Marshal(invalidChoiceMsg)
+
+	if err != nil || err2 != nil {
+		slog.Error("error marshalling room select message", "error", err)
+	}
+
+	conn.Write(roomChoiceBytes)
+
+	buf := make([]byte, 1024)
+	var msg common.Message
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			slog.Error("error reading in client message", "error", err)
+		}
+
+		json.Unmarshal(buf[:n], &msg)
+		choice, err := strconv.Atoi(msg.Msg)
+		if err != nil {
+			conn.Write(invalidChoiceBytes)
+			continue
+		}
+		if choice == -1 {
+			fmt.Println("handling client leave process...") //TODO
+		}
+
+		room, ok := h.roomMap[choice]
+		if !ok {
+			conn.Write(invalidChoiceBytes)
+			continue
+		}
+
+		return room, nil
+	}
 }
 
 // func (h Hub) HandleClientMap() {

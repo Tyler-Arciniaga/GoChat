@@ -11,6 +11,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	c := Client{name: os.Args[2]}
+	c := Client{name: os.Args[2], MailBoxChan: make(chan []byte)}
 	c.StartClient()
 }

@@ -10,6 +10,7 @@ const (
 	Broadcast MessageType = iota
 	Whisper
 	UserData
+	ServerMessage
 	Join
 	Leave
 	FileMetaData //announces new file metadata
@@ -18,7 +19,7 @@ const (
 
 type Message struct {
 	Type     MessageType `json:"message_type"`
-	Name     string      `json:"name"`
+	From     string      `json:"name"`
 	To       string      `json:"to"` //empty string unless /whisper command evoked
 	Msg      string      `json:"msg"`
 	FileMeta *FileHeader `json:"file_meta"`
@@ -26,7 +27,7 @@ type Message struct {
 }
 
 func (m Message) String() string {
-	return fmt.Sprintf("[%s]: %s\n", m.Name, m.Msg)
+	return fmt.Sprintf("[%s]: %s", m.From, m.Msg)
 }
 
 type FileHeader struct {

@@ -19,17 +19,18 @@ func (c Client) StartClient() {
 		return
 	}
 	c.conn = conn
-	fmt.Println("connection to tcp server set!")
+	fmt.Println("connection to chat server established!")
 	defer conn.Close()
 
 	c.SendClientInfo()
 
 	go c.HandleIncomingMessages()
+	go c.PrintIncomingMessages()
 	c.SendMessages()
 }
 
 func (c Client) SendClientInfo() {
-	userInfoMsg := common.Message{Type: common.UserData, Name: c.name}
+	userInfoMsg := common.Message{Type: common.UserData, From: c.name}
 	bytes, err := json.Marshal(userInfoMsg)
 	if err != nil {
 		slog.Error("error marshalling user info message")
@@ -41,12 +42,24 @@ func (c Client) SendClientInfo() {
 func (c Client) HandleIncomingMessages() {
 	buf := make([]byte, 1024)
 	for {
-		_, err := c.conn.Read(buf)
+		n, err := c.conn.Read(buf)
 		if err != nil {
 			slog.Error("client conn read error", "err", err)
 		}
 
-		fmt.Println("message from hub:", string(buf))
+		c.MailBoxChan <- buf[:n]
+	}
+}
+
+func (c Client) PrintIncomingMessages() {
+	var msg common.Message
+	for b := range c.MailBoxChan {
+		err := json.Unmarshal(b, &msg)
+		if err != nil {
+			slog.Error("error unmarshalling incoming message", "error", err)
+		}
+
+		fmt.Println(msg)
 	}
 }
 
@@ -59,7 +72,7 @@ func (c Client) SendMessages() {
 		}
 		for scanner.Scan() {
 			line := scanner.Bytes()
-			newMessage := common.Message{Type: common.Broadcast, Name: c.name, Msg: string(line)}
+			newMessage := common.Message{Type: common.Broadcast, From: c.name, Msg: string(line)}
 			marshalledMsg, err := json.Marshal(newMessage)
 			if err != nil {
 				slog.Error("error marshaling message data", "error", err)

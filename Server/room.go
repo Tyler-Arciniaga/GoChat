@@ -51,7 +51,8 @@ func (r Room) HandleAdminSignals() {
 
 func (r Room) AdmitUser(s ClientModel) {
 	r.chatterMap[s.name] = s.conn
-} //TODO
+	r.broadcastChannel <- common.Message{Type: common.Broadcast, From: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has joined the chat room", s.name)}
+}
 
 func (r Room) RemoveUser(s ClientModel) {} //TODO
 
@@ -72,7 +73,6 @@ func (r Room) HandleChatMessages() {
 }
 
 func (r Room) BroadcastMessage(m common.Message) {
-	fmt.Println("broadcasting message:", m)
 	b, _ := json.Marshal(m)
 	for _, conn := range r.chatterMap {
 		go func() {

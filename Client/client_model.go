@@ -1,8 +1,11 @@
 package main
 
-import "net"
+import (
+	"net"
+)
 
 type Client struct {
-	name string
-	conn net.Conn
+	name        string
+	conn        net.Conn
+	MailBoxChan chan []byte
 }
