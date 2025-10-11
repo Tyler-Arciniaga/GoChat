@@ -1,0 +1,16 @@
+all: server client
+
+server:
+	go build -o server ./server
+
+client:
+	go build -o client ./client
+
+run-server:
+	go run ./server
+
+run-client:
+	go run ./client
+
+clean:
+	rm -f server client

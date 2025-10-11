@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	common "go-chat/Common"
 	"log/slog"
@@ -14,10 +15,10 @@ func (h Hub) Start() {
 	defer func() {
 		if v := recover(); v != nil {
 			slog.Error("Unrecoverable panic detected, shutting down chat server now.", "panic", v)
-			//h.CleanUpHub()
-			fmt.Println("cleaning up hub resources...") //TODO
+			h.CleanUpHub()
 		}
 	}()
+	defer h.CleanUpHub()
 
 	slog.Info(fmt.Sprintf("Listening on port %s", h.port))
 
@@ -26,6 +27,8 @@ func (h Hub) Start() {
 		fmt.Println("error creating network listener")
 		os.Exit(1)
 	}
+
+	go h.HandleClientDisconnect()
 
 	for i := range 3 {
 		newRoom := Room{
@@ -58,10 +61,16 @@ func (h Hub) Start() {
 }
 
 func (h Hub) HandleNewClientConnection(conn net.Conn) {
-	clientName := h.HandleClientInfoMessage(conn) //blocking call
+	clientName, err := h.HandleClientInfoMessage(conn) //blocking call
+	if err != nil {
+		h.leaveChannel <- conn
+		return
+	}
+
 	room, err := h.HandleRoomSelect(conn)
 	if err != nil {
 		slog.Error("error selecting room", "error", err)
+		h.leaveChannel <- conn
 		return
 	}
 
@@ -73,18 +82,19 @@ func (h Hub) HandleNewClientConnection(conn net.Conn) {
 	h.clientRoomMap[conn] = room
 }
 
-func (h Hub) HandleClientInfoMessage(conn net.Conn) string {
+func (h Hub) HandleClientInfoMessage(conn net.Conn) (string, error) {
 	buf := make([]byte, 1024)
 	var msg common.Message
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
 			slog.Error("client conn read error", "err", err)
+			return "", err
 		}
 
 		json.Unmarshal(buf[:n], &msg)
 		if msg.Type == common.UserData {
-			return msg.From
+			return msg.From, nil
 		} //TODO: handle avoiding duplicate names
 	}
 }
@@ -97,6 +107,7 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			slog.Error("error reading in client message", "error", err)
+			h.leaveChannel <- conn
 			return
 		}
 
@@ -104,6 +115,7 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 		err = json.Unmarshal(buf[:n], &message)
 		if err != nil {
 			slog.Error("error unmarshalling incoming message bytes", "error", err)
+			continue
 		}
 
 		if message.Type == common.Leave {
@@ -119,9 +131,11 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 	}
 }
 
-func (h Hub) HandleClientDisconnect(conn net.Conn) {
+func (h Hub) HandleClientDisconnect() {
 	for c := range h.leaveChannel {
+		slog.Info("handling client connection disconnect", "conn", c)
 		delete(h.clientRoomMap, c)
+		c.Close()
 	}
 }
 
@@ -153,7 +167,7 @@ func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
 			continue
 		}
 		if choice == -1 {
-			fmt.Println("handling client leave process...") //TODO
+			return nil, errors.New("leave command bundled as error")
 		}
 
 		room, ok := h.roomMap[choice]
@@ -164,6 +178,17 @@ func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
 
 		return room, nil
 	}
+}
+
+func (h Hub) CleanUpHub() {
+	for _, r := range h.roomMap {
+		r.CleanUpRoom()
+	}
+	for c := range h.clientRoomMap {
+		c.Close()
+	}
+	close(h.joinChannel)
+	close(h.leaveChannel)
 }
 
 // func (h Hub) HandleClientMap() {

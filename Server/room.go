@@ -61,7 +61,7 @@ func (r Room) RemoveUser(s ClientModel) {
 	}()
 
 	delete(r.chatterMap, s.name)
-} //TODO
+}
 
 func (r Room) HandleChatMessages() {
 	for {
@@ -102,6 +102,14 @@ func (r Room) WhisperMessage(m common.Message) {
 
 		dstConn.Write(b)
 	}()
+}
+
+func (r Room) CleanUpRoom() {
+	close(r.broadcastChannel)
+	close(r.joinChannel)
+	close(r.leaveChannel)
+	close(r.messageChannel)
+	close(r.whisperChannel)
 }
 
 // func (r Room) HandleConnectionMap(hubLeaveChannel chan Client) {
