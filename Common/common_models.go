@@ -15,6 +15,14 @@ const (
 	Leave
 	FileMetaData //announces new file metadata
 	FileData     //carries file's raw bytes
+	Ack
+)
+
+type Status int
+
+const (
+	Ready Status = iota
+	Failed
 )
 
 type Message struct {
@@ -22,8 +30,9 @@ type Message struct {
 	From     string      `json:"name"`
 	To       string      `json:"to"` //empty string unless /whisper command evoked
 	Msg      string      `json:"msg"`
-	FileMeta *FileHeader `json:"file_meta"`
+	FileMeta FileHeader  `json:"file_meta"`
 	Data     []byte      `json:"data"`
+	Status   Status      `json:"status"`
 }
 
 func (m Message) String() string {

@@ -126,11 +126,47 @@ func (c Client) ParseCommandMessage(line string) (common.Message, error) {
 	case "whisper":
 		return common.Message{Type: common.Whisper, From: c.name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}, nil
 	case "sendfile":
-		fmt.Println("handle send file")
+		fmt.Println("handle send file") //TODO
+		fmt.Println(os.Getwd())
+		err := c.HandleFileTransfer(parsedCommand[1])
+		fmt.Println(err)
 	default:
 		return common.Message{}, errors.New("error parsing client command line: invalid command")
 	}
 	return common.Message{}, errors.New("error parsing client command line: invalid command")
+}
+
+func (c Client) HandleFileTransfer(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	fileHeader, err := c.ExtractFileMetaData(file)
+	if err != nil {
+		return err
+	}
+
+	fileHeaderMsg := common.Message{Type: common.FileMetaData, From: c.name, FileMeta: fileHeader}
+	b, _ := json.Marshal(fileHeaderMsg)
+	c.conn.Write(b)
+
+	return nil
+}
+
+func (c Client) ExtractFileMetaData(file *os.File) (common.FileHeader, error) {
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return common.FileHeader{}, nil
+	}
+
+	newFileHeader := common.FileHeader{
+		Filename: fileInfo.Name(),
+		FileSize: fileInfo.Size(),
+	}
+
+	return newFileHeader, nil
 }
 
 func (c Client) HandleFatalErrors() {
