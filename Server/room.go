@@ -54,7 +54,14 @@ func (r Room) AdmitUser(s ClientModel) {
 	r.broadcastChannel <- common.Message{Type: common.Broadcast, From: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has joined the chat room", s.name)}
 }
 
-func (r Room) RemoveUser(s ClientModel) {} //TODO
+func (r Room) RemoveUser(s ClientModel) {
+	disconnectMessage := common.Message{Type: common.Broadcast, From: fmt.Sprintf("Room %d", r.roomID), Msg: fmt.Sprintf("%s has disconnected from the chat room", s.name)}
+	go func() {
+		r.broadcastChannel <- disconnectMessage
+	}()
+
+	delete(r.chatterMap, s.name)
+} //TODO
 
 func (r Room) HandleChatMessages() {
 	for {
@@ -79,9 +86,23 @@ func (r Room) BroadcastMessage(m common.Message) {
 			conn.Write(b)
 		}()
 	}
-} //TODO
+}
 
-func (r Room) WhisperMessage(m common.Message) {} //TODO
+func (r Room) WhisperMessage(m common.Message) {
+	b, _ := json.Marshal(m)
+	dstConn, ok := r.chatterMap[m.To]
+	srcConn := r.chatterMap[m.From]
+	go func() {
+		if !ok {
+			serverMessage := common.Message{Type: common.ServerMessage, From: "Server", Msg: "the person you are trying to whisper does not exist"}
+			b, _ := json.Marshal(serverMessage)
+			srcConn.Write(b)
+			return
+		}
+
+		dstConn.Write(b)
+	}()
+}
 
 // func (r Room) HandleConnectionMap(hubLeaveChannel chan Client) {
 // 	for {

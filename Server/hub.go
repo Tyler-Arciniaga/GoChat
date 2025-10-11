@@ -106,7 +106,22 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 			slog.Error("error unmarshalling incoming message bytes", "error", err)
 		}
 
+		if message.Type == common.Leave {
+			go func() {
+				h.leaveChannel <- conn
+			}()
+			go func() {
+				room.leaveChannel <- ClientModel{name: message.From, conn: conn}
+			}()
+		}
+
 		room.messageChannel <- message
+	}
+}
+
+func (h Hub) HandleClientDisconnect(conn net.Conn) {
+	for c := range h.leaveChannel {
+		delete(h.clientRoomMap, c)
 	}
 }
 
