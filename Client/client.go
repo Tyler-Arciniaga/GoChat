@@ -135,7 +135,6 @@ func (c Client) ParseCommandMessage(line string) (common.Message, error) {
 	case "whisper":
 		return common.Message{Type: common.Whisper, From: c.name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}, nil
 	case "sendfile":
-		fmt.Println("handle send file") //TODO
 		err := c.HandleFileTransfer(parsedCommand[1])
 		if err != nil {
 			slog.Error(err.Error())

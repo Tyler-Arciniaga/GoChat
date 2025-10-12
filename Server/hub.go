@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	common "go-chat/Common"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -111,7 +112,6 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 			return
 		}
 
-		fmt.Println(string(buf[:n]))
 		err = json.Unmarshal(buf[:n], &message)
 		if err != nil {
 			slog.Error("error unmarshalling incoming message bytes", "error", err)
@@ -127,15 +127,36 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 				room.leaveChannel <- ClientModel{name: message.From, conn: conn}
 			}()
 		case common.FileMetaData:
-			ackMessage := common.Message{Type: common.Ack, From: "Server", Status: common.Ready}
-			b, _ := json.Marshal(ackMessage)
-			conn.Write(b)
+			h.HandleIncomingFileStream(conn, message)
 		case common.FileData:
 			fmt.Println("handle file data stream") //TODO
 		default:
+			fmt.Println(string(buf[:n]))
 			room.messageChannel <- message
 		}
 	}
+}
+
+func (h Hub) HandleIncomingFileStream(conn net.Conn, m common.Message) error {
+	ackMessage := common.Message{Type: common.Ack, From: "Server", Status: common.Ready}
+	b, _ := json.Marshal(ackMessage)
+	conn.Write(b)
+
+	filename := m.FileMeta.Filename
+	filesize := m.FileMeta.FileSize
+
+	newFile, err := os.Create(fmt.Sprintf("server-downloads/(server)%s", filename))
+	if err != nil {
+		return err
+	}
+	defer newFile.Close()
+
+	_, err = io.CopyN(newFile, conn, filesize)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (h Hub) HandleClientDisconnect() {

@@ -31,7 +31,7 @@ type Message struct {
 	To       string      `json:"to"` //empty string unless /whisper command evoked
 	Msg      string      `json:"msg"`
 	FileMeta FileHeader  `json:"file_meta"`
-	Data     []byte      `json:"data"`
+	FileData []byte      `json:"data"`
 	Status   Status      `json:"status"`
 }
 
