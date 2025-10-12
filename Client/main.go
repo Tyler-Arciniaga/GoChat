@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	common "go-chat/Common"
 	"os"
 )
 
@@ -11,6 +12,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	c := Client{name: os.Args[1], MailBoxChan: make(chan []byte), ErrorChan: make(chan error)}
+	c := Client{name: os.Args[1], MailBoxChan: make(chan []byte), ErrorChan: make(chan error), AckChan: make(chan common.Status)}
 	c.StartClient()
 }

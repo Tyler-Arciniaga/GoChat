@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	common "go-chat/Common"
+	"io"
+	"log/slog"
 	"net"
 	"os"
 	"strings"
@@ -70,8 +72,15 @@ func (c Client) PrintIncomingMessages() {
 			c.ErrorChan <- err
 			return
 		}
+		switch msg.Type {
+		case common.Ack:
+			go func() {
+				c.AckChan <- msg.Status
+			}()
+		default:
+			fmt.Println(msg)
+		}
 
-		fmt.Println(msg)
 	}
 }
 
@@ -127,9 +136,10 @@ func (c Client) ParseCommandMessage(line string) (common.Message, error) {
 		return common.Message{Type: common.Whisper, From: c.name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}, nil
 	case "sendfile":
 		fmt.Println("handle send file") //TODO
-		fmt.Println(os.Getwd())
 		err := c.HandleFileTransfer(parsedCommand[1])
-		fmt.Println(err)
+		if err != nil {
+			slog.Error(err.Error())
+		}
 	default:
 		return common.Message{}, errors.New("error parsing client command line: invalid command")
 	}
@@ -137,6 +147,37 @@ func (c Client) ParseCommandMessage(line string) (common.Message, error) {
 }
 
 func (c Client) HandleFileTransfer(filename string) error {
+	err := c.HandleSendFileHeader(filename)
+	if err != nil {
+		return fmt.Errorf("error sending file header to server: %s", err)
+	}
+
+	ackStatus := <-c.AckChan
+	if ackStatus != common.Ready {
+		return fmt.Errorf("error: server could not prepare for incoming file data: %s", err)
+	}
+
+	err = c.SendFileData(filename)
+	if err != nil {
+		return fmt.Errorf("error sending file data stream to hub: %s", err)
+	}
+
+	return nil
+}
+
+func (c Client) SendFileData(filename string) error {
+	file, _ := os.Open(filename)
+	defer file.Close()
+
+	_, err := io.Copy(c.conn, file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c Client) HandleSendFileHeader(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -150,8 +191,11 @@ func (c Client) HandleFileTransfer(filename string) error {
 
 	fileHeaderMsg := common.Message{Type: common.FileMetaData, From: c.name, FileMeta: fileHeader}
 	b, _ := json.Marshal(fileHeaderMsg)
-	c.conn.Write(b)
+	_, err = c.conn.Write(b)
 
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

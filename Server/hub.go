@@ -118,16 +118,23 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 			continue
 		}
 
-		if message.Type == common.Leave {
+		switch message.Type {
+		case common.Leave:
 			go func() {
 				h.leaveChannel <- conn
 			}()
 			go func() {
 				room.leaveChannel <- ClientModel{name: message.From, conn: conn}
 			}()
+		case common.FileMetaData:
+			ackMessage := common.Message{Type: common.Ack, From: "Server", Status: common.Ready}
+			b, _ := json.Marshal(ackMessage)
+			conn.Write(b)
+		case common.FileData:
+			fmt.Println("handle file data stream") //TODO
+		default:
+			room.messageChannel <- message
 		}
-
-		room.messageChannel <- message
 	}
 }
 

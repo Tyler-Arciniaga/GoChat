@@ -1,6 +1,7 @@
 package main
 
 import (
+	common "go-chat/Common"
 	"net"
 )
 
@@ -9,4 +10,5 @@ type Client struct {
 	conn        net.Conn
 	MailBoxChan chan []byte
 	ErrorChan   chan error
+	AckChan     chan common.Status
 }
