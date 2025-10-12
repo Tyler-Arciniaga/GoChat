@@ -102,7 +102,7 @@ func (h Hub) HandleClientInfoMessage(conn net.Conn) (string, error) {
 
 func (h Hub) RecieveClientMessages(conn net.Conn) {
 	buf := make([]byte, 1024)
-	var message common.Message
+	var envelope common.Envelope
 	room := h.clientRoomMap[conn]
 	for {
 		n, err := conn.Read(buf)
@@ -112,38 +112,51 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 			return
 		}
 
-		err = json.Unmarshal(buf[:n], &message)
+		err = json.Unmarshal(buf[:n], &envelope)
 		if err != nil {
-			slog.Error("error unmarshalling incoming message bytes", "error", err)
+			slog.Error("error unmarshalling incoming message bytes into envelope type", "error", err)
 			continue
 		}
 
-		switch message.Type {
+		switch envelope.Type {
 		case common.Leave:
+			var l common.LeaveSignal
+			json.Unmarshal(buf[:n], &l)
 			go func() {
 				h.leaveChannel <- conn
 			}()
 			go func() {
-				room.leaveChannel <- ClientModel{name: message.From, conn: conn}
+				room.leaveChannel <- ClientModel{name: l.From, conn: conn}
 			}()
 		case common.FileMetaData:
-			h.HandleIncomingFileStream(conn, message)
+			var f common.FileHeader
+			json.Unmarshal(buf[:n], &f)
+			h.HandleIncomingFileStream(conn, f, room)
 		case common.FileData:
 			fmt.Println("handle file data stream") //TODO
 		default:
+			var m common.Message
+			json.Unmarshal(buf[:n], &m)
 			fmt.Println(string(buf[:n]))
-			room.messageChannel <- message
+			room.messageChannel <- m
 		}
 	}
 }
 
-func (h Hub) HandleIncomingFileStream(conn net.Conn, m common.Message) error {
-	ackMessage := common.Message{Type: common.Ack, From: "Server", Status: common.Ready}
+func (h Hub) HandleIncomingFileStream(conn net.Conn, f common.FileHeader, r *Room) error {
+	//reroute the file header to the clients in the same room
+	r.fileHeaderChannel <- f
+	//send ack message
+	ackMessage := common.Acknowledgement{Type: common.Ack, Status: common.Ready} //TODO: improve ack logic
 	b, _ := json.Marshal(ackMessage)
 	conn.Write(b)
 
-	filename := m.FileMeta.Filename
-	filesize := m.FileMeta.FileSize
+	//stream bytes
+
+	//reroute bytes to room
+
+	filename := f.Filename
+	filesize := f.FileSize
 
 	newFile, err := os.Create(fmt.Sprintf("server-downloads/(server)%s", filename))
 	if err != nil {

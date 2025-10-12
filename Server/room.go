@@ -79,6 +79,20 @@ func (r Room) HandleChatMessages() {
 	}
 }
 
+func (r Room) HandleFileHeaders() {
+	for f := range r.fileHeaderChannel {
+		b, _ := json.Marshal(f)
+		for name, conn := range r.chatterMap {
+			if name == f.From {
+				continue
+			}
+			go func() {
+				conn.Write(b)
+			}()
+		}
+	}
+}
+
 func (r Room) BroadcastMessage(m common.Message) {
 	b, _ := json.Marshal(m)
 	for _, conn := range r.chatterMap {

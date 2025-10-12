@@ -64,21 +64,25 @@ func (c Client) HandleIncomingMessages() {
 }
 
 func (c Client) PrintIncomingMessages() {
-	var msg common.Message
+	var e common.Envelope
 	for b := range c.MailBoxChan {
-		err := json.Unmarshal(b, &msg)
+		err := json.Unmarshal(b, &e)
 		if err != nil {
 			// slog.Error("error unmarshalling incoming message", "error", err)
 			c.ErrorChan <- err
 			return
 		}
-		switch msg.Type {
+		switch e.Type {
 		case common.Ack:
+			var a common.Acknowledgement
+			json.Unmarshal(b, &a)
 			go func() {
-				c.AckChan <- msg.Status
+				c.AckChan <- a.Status
 			}()
 		default:
-			fmt.Println(msg)
+			var m common.Message
+			json.Unmarshal(b, &m)
+			fmt.Println(m)
 		}
 
 	}
@@ -93,14 +97,14 @@ func (c Client) SendMessages() {
 			c.ErrorChan <- err
 		}
 
-		var newMessage common.Message
+		var newMessage any
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			if len(line) < 1 {
 				continue
 			}
 			if line[0] == byte('/') {
-				newMessage, err = c.ParseCommandMessage(string(line))
+				newMessage, err = c.ParseCommandMessage(string(line)) //TODO: make interface for all client messages (chats, leave signals, file transfers, etc)
 				if err != nil {
 					// slog.Error("error parsing command message from client", "error", err)
 					continue
@@ -115,23 +119,24 @@ func (c Client) SendMessages() {
 			}
 
 			c.conn.Write(marshalledMsg)
-			if newMessage.Type == common.Leave {
+			_, ok := newMessage.(common.LeaveSignal)
+			if ok {
 				c.ErrorChan <- errors.New("leave signal bundled as error")
 			}
 		}
 	}
 }
 
-func (c Client) ParseCommandMessage(line string) (common.Message, error) {
+func (c Client) ParseCommandMessage(line string) (any, error) {
 	parsedCommand := strings.Split(line[1:], " ")
 	if len(parsedCommand) < 1 {
-		return common.Message{}, errors.New("error parsing command")
+		return nil, errors.New("error parsing command")
 	}
 
 	cmd := parsedCommand[0]
 	switch cmd {
 	case "leave":
-		return common.Message{Type: common.Leave, From: c.name}, nil
+		return common.LeaveSignal{Type: common.Leave, From: c.name, Conn: c.conn}, nil
 	case "whisper":
 		return common.Message{Type: common.Whisper, From: c.name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}, nil
 	case "sendfile":
@@ -140,9 +145,9 @@ func (c Client) ParseCommandMessage(line string) (common.Message, error) {
 			slog.Error(err.Error())
 		}
 	default:
-		return common.Message{}, errors.New("error parsing client command line: invalid command")
+		return nil, errors.New("error parsing client command line: invalid command")
 	}
-	return common.Message{}, errors.New("error parsing client command line: invalid command")
+	return nil, errors.New("error parsing client command line: invalid command")
 }
 
 func (c Client) HandleFileTransfer(filename string) error {
@@ -188,8 +193,7 @@ func (c Client) HandleSendFileHeader(filename string) error {
 		return err
 	}
 
-	fileHeaderMsg := common.Message{Type: common.FileMetaData, From: c.name, FileMeta: fileHeader}
-	b, _ := json.Marshal(fileHeaderMsg)
+	b, _ := json.Marshal(fileHeader)
 	_, err = c.conn.Write(b)
 
 	if err != nil {
