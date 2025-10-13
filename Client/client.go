@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +13,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"bytes"
 )
 
 //var once sync.Once
@@ -83,13 +84,14 @@ func (c Client) PrintIncomingMessages() {
 		case common.FileMetaData:
 			var f common.FileHeader
 			json.Unmarshal(b, &f)
-			go func(){
+			go func() {
 				c.HandleIncomingFileHeader(f)
 			}()
-			case common.FileData:
-				var d common.FileDataStream
-				json.Unmarshal(b, &d)
-				c.FileDataChan <- d
+		case common.FileData:
+			fmt.Println("recieved some file data")
+			var d common.FileDataChunk
+			json.Unmarshal(b, &d)
+			c.FileDataChan <- d
 		default:
 			var m common.Message
 			json.Unmarshal(b, &m)
@@ -129,6 +131,8 @@ func (c Client) SendMessages() {
 				continue
 			}
 
+			byteLength := int32(len(marshalledMsg))
+			binary.Write(c.conn, binary.BigEndian, byteLength)
 			c.conn.Write(marshalledMsg)
 			_, ok := newMessage.(common.LeaveSignal)
 			if ok {
@@ -188,19 +192,34 @@ func (c Client) SendFileData(filename string) error {
 	// if err != nil {
 	// 	return err
 	// }
+	var chunk_size int64 //TODO experiment with different chunk size (maybe try speed with go testing package)
 	var buf bytes.Buffer
-	_, err := io.Copy(&buf, file)
-	if err != nil{
-		return err
+
+	chunk_size = 1000 //1000 bytes
+	for {
+		_, err := io.CopyN(file, &buf, chunk_size)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		newDataChunk := common.FileDataChunk{Type: common.FileData, From: c.name, DataChunk: buf, IsLast: err == io.EOF}
+		b, err := json.Marshal(newDataChunk)
+		if err != nil {
+			return err
+		}
+
+		c.conn.Write(b)
+		if err == io.EOF {
+			break
+		}
 	}
 
-	fileData := common.FileDataStream{Type: common.FileData, From: c.name, Data: buf}
-	b, err := json.Marshal(fileData)
-	if err != nil{
-		return err
-	}
-	
-	c.conn.Write(b)
+	// //fileData := common.FileDataStream{Type: common.FileData, From: c.name, Data: buf}
+	// b, err := json.Marshal(fileData)
+	// if err != nil {
+	// 	return err
+	// }
+	//
+	// c.conn.Write(b)
 	return nil
 }
 
@@ -226,36 +245,42 @@ func (c Client) HandleSendFileHeader(filename string) error {
 	return nil
 }
 
-func (c Client) HandleIncomingFileHeader(f common.FileHeader){
+func (c Client) HandleIncomingFileHeader(f common.FileHeader) {
 	fmt.Printf("User (%s) is trying to send you a file. Accept and download file? Y/N\n", f.From)
 	ack, err := c.HandleIncomingFileChoice()
-	if err != nil || ack.Status != common.Ready{
+	if err != nil || ack.Status != common.Ready {
 		return
 	}
-	
+
 	//TODO: send ack to room which gives it to server which sends to client so that it knows it can send now
+
+	go c.HandleIncomingFileData(f)
+
 }
 
-func (c Client) HandleIncomingFileData(f common.FileHeader){
+func (c Client) HandleIncomingFileData(f common.FileHeader) {
 	filename := f.Filename
-	filesize := f.FileSize
 	newFile, err := os.Create(fmt.Sprintf("client-downloads/(%s)%s", c.name, filename))
+	if err != nil {
+		slog.Error("error creating new file based on incoming file header", "err", err)
+		return
+	}
 	defer newFile.Close()
 
-	d := <- c.FileDataChan //blocking call (waits for actual file data to be sent from room)
-	if f.From != d.From {
-		fmt.Println("Handle concurrent incoming file data streams") //TODO
-	}
-
-	_, err = io.CopyN(newFile, &d.Data, filesize)
-	if err != nil{
-		slog.Error("error copying file data stream into new client file")
-		return
+	for chunk := range c.FileDataChan {
+		_, err := io.Copy(newFile, &chunk.DataChunk)
+		if err != nil {
+			slog.Error("error writing from incoming data chunk to local file copy", "err", err)
+			return
+		}
+		if chunk.IsLast {
+			break
+		}
 	}
 
 }
 
-func (c Client) HandleIncomingFileChoice() (common.Acknowledgement, error){
+func (c Client) HandleIncomingFileChoice() (common.Acknowledgement, error) {
 	//TODO: handle logic regarding giving user choice to donwload or refuse sent file
 	return common.Acknowledgement{Type: common.Ack, Status: common.Ready}, nil
 }
@@ -267,8 +292,8 @@ func (c Client) ExtractFileMetaData(file *os.File) (common.FileHeader, error) {
 	}
 
 	newFileHeader := common.FileHeader{
-		Type: common.FileMetaData,
-		From: c.name,
+		Type:     common.FileMetaData,
+		From:     c.name,
 		Filename: fileInfo.Name(),
 		FileSize: fileInfo.Size(),
 	}

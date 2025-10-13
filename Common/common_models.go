@@ -1,9 +1,9 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
 	"net"
-	"bytes"
 )
 
 type MessageType int
@@ -56,10 +56,11 @@ type FileHeader struct {
 	FileSize int64       `json:"filesize"`
 }
 
-type FileDataStream struct{
-	Type MessageType `json:"type"`
-	From string `json:"from"`
-	Data bytes.Buffer `json:"data"`
+type FileDataChunk struct {
+	Type      MessageType  `json:"type"`
+	From      string       `json:"from"`
+	DataChunk bytes.Buffer `json:"data_chunk"`
+	IsLast    bool         `json:"is_last"`
 }
 
 type Envelope struct {

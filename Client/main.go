@@ -13,11 +13,11 @@ func main() {
 	}
 
 	c := Client{
-		name: os.Args[1], 
-		MailBoxChan: make(chan []byte), 
-		ErrorChan: make(chan error), 
-		AckChan: make(chan common.Status),
-		FileDataChan: make(chan common.FileDataStream),
+		name:         os.Args[1],
+		MailBoxChan:  make(chan []byte),
+		ErrorChan:    make(chan error),
+		AckChan:      make(chan common.Status),
+		FileDataChan: make(chan common.FileDataChunk),
 	}
 	c.StartClient()
 }
