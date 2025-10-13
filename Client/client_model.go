@@ -11,4 +11,5 @@ type Client struct {
 	MailBoxChan chan []byte
 	ErrorChan   chan error
 	AckChan     chan common.Status
+	FileDataChan chan common.FileDataStream
 }

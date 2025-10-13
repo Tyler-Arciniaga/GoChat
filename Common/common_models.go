@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"net"
+	"bytes"
 )
 
 type MessageType int
@@ -53,6 +54,12 @@ type FileHeader struct {
 	From     string      `json:"from"`
 	Filename string      `json:"filename"`
 	FileSize int64       `json:"filesize"`
+}
+
+type FileDataStream struct{
+	Type MessageType `json:"type"`
+	From string `json:"from"`
+	Data bytes.Buffer `json:"data"`
 }
 
 type Envelope struct {

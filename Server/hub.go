@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	common "go-chat/Common"
-	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -41,6 +40,7 @@ func (h Hub) Start() {
 			broadcastChannel: make(chan common.Message),
 			whisperChannel:   make(chan common.Message),
 			fileHeaderChannel: make(chan common.FileHeader),
+			fileDataChannel: make(chan common.FileDataStream),
 		}
 
 		h.roomMap[i] = &newRoom
@@ -133,9 +133,12 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 		case common.FileMetaData:
 			var f common.FileHeader
 			json.Unmarshal(buf[:n], &f)
-			h.HandleIncomingFileStream(conn, f, room)
+			h.HandleIncomingFileHeader(conn, f, room)
 		case common.FileData:
 			fmt.Println("handle file data stream") //TODO
+			var d common.FileDataStream
+			json.Unmarshal(buf[:n], &d)
+			h.HandleIncomingFileStream(conn, d, room)
 		default:
 			var m common.Message
 			json.Unmarshal(buf[:n], &m)
@@ -145,7 +148,7 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 	}
 }
 
-func (h Hub) HandleIncomingFileStream(conn net.Conn, f common.FileHeader, r *Room) error {
+func (h Hub) HandleIncomingFileHeader(conn net.Conn, f common.FileHeader, r *Room) error {
 	//reroute the file header to the clients in the same room
 	r.fileHeaderChannel <- f
 	//send ack message
@@ -153,25 +156,27 @@ func (h Hub) HandleIncomingFileStream(conn net.Conn, f common.FileHeader, r *Roo
 	b, _ := json.Marshal(ackMessage)
 	conn.Write(b)
 
-	//stream bytes
+
+	// filename := f.Filename
+	// filesize := f.FileSize
 	
+	// newFile, err := os.Create(fmt.Sprintf("server-downloads/(server)%s", filename))
+	// if err != nil {
+	// 	return err
+	// }
+	// defer newFile.Close()
 
-	//reroute bytes to room
+	// _, err = io.CopyN(newFile, conn, filesize)
+	// if err != nil {
+	// 	return err
+	// }
 
-	filename := f.Filename
-	filesize := f.FileSize
-	fmt.Println("here")
-	newFile, err := os.Create(fmt.Sprintf("server-downloads/(server)%s", filename))
-	if err != nil {
-		return err
-	}
-	defer newFile.Close()
+	return nil
+}
 
-	_, err = io.CopyN(newFile, conn, filesize)
-	if err != nil {
-		return err
-	}
-
+func (h Hub) HandleIncomingFileStream(conn net.Conn, d common.FileDataStream, r *Room) error{
+	r.fileDataChannel <- d
+	//TODO: more internal logic about successful file transfer being returned to sender client
 	return nil
 }
 

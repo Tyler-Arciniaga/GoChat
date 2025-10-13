@@ -23,6 +23,7 @@ type Room struct {
 	broadcastChannel  chan common.Message
 	whisperChannel    chan common.Message
 	fileHeaderChannel chan common.FileHeader
+	fileDataChannel chan common.FileDataStream
 }
 
 type ClientModel struct {

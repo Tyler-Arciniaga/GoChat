@@ -11,6 +11,7 @@ func (r Room) StartRoom() {
 	go r.HandleAdminSignals()
 	go r.HandleChatMessages()
 	go r.HandleFileHeaders()
+	go r.HandleFileDataStream()
 }
 
 func (r Room) RouteRawMessages() {
@@ -94,6 +95,20 @@ func (r Room) HandleFileHeaders() {
 	}
 }
 
+func (r Room) HandleFileDataStream(){
+	for d := range r.fileDataChannel {
+		b, _ := json.Marshal(d)
+		for name, conn := range r.chatterMap{
+			if name == d.From{
+				continue
+			}
+			go func(){
+				conn.Write(b)
+			}()
+		}
+	}
+}
+
 func (r Room) BroadcastMessage(m common.Message) {
 	b, _ := json.Marshal(m)
 	for _, conn := range r.chatterMap {
@@ -125,6 +140,7 @@ func (r Room) CleanUpRoom() {
 	close(r.leaveChannel)
 	close(r.messageChannel)
 	close(r.whisperChannel)
+	close(r.fileDataChannel)
 }
 
 // func (r Room) HandleConnectionMap(hubLeaveChannel chan Client) {

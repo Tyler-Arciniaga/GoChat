@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"bytes"
 )
 
 //var once sync.Once
@@ -85,6 +86,10 @@ func (c Client) PrintIncomingMessages() {
 			go func(){
 				c.HandleIncomingFileHeader(f)
 			}()
+			case common.FileData:
+				var d common.FileDataStream
+				json.Unmarshal(b, &d)
+				c.FileDataChan <- d
 		default:
 			var m common.Message
 			json.Unmarshal(b, &m)
@@ -179,11 +184,23 @@ func (c Client) SendFileData(filename string) error {
 	file, _ := os.Open(filename)
 	defer file.Close()
 
-	_, err := io.Copy(c.conn, file)
-	if err != nil {
+	// _, err := io.Copy(c.conn, file)
+	// if err != nil {
+	// 	return err
+	// }
+	var buf bytes.Buffer
+	_, err := io.Copy(&buf, file)
+	if err != nil{
 		return err
 	}
 
+	fileData := common.FileDataStream{Type: common.FileData, From: c.name, Data: buf}
+	b, err := json.Marshal(fileData)
+	if err != nil{
+		return err
+	}
+	
+	c.conn.Write(b)
 	return nil
 }
 
@@ -210,7 +227,37 @@ func (c Client) HandleSendFileHeader(filename string) error {
 }
 
 func (c Client) HandleIncomingFileHeader(f common.FileHeader){
-	fmt.Println(f)
+	fmt.Printf("User (%s) is trying to send you a file. Accept and download file? Y/N\n", f.From)
+	ack, err := c.HandleIncomingFileChoice()
+	if err != nil || ack.Status != common.Ready{
+		return
+	}
+	
+	//TODO: send ack to room which gives it to server which sends to client so that it knows it can send now
+}
+
+func (c Client) HandleIncomingFileData(f common.FileHeader){
+	filename := f.Filename
+	filesize := f.FileSize
+	newFile, err := os.Create(fmt.Sprintf("client-downloads/(%s)%s", c.name, filename))
+	defer newFile.Close()
+
+	d := <- c.FileDataChan //blocking call (waits for actual file data to be sent from room)
+	if f.From != d.From {
+		fmt.Println("Handle concurrent incoming file data streams") //TODO
+	}
+
+	_, err = io.CopyN(newFile, &d.Data, filesize)
+	if err != nil{
+		slog.Error("error copying file data stream into new client file")
+		return
+	}
+
+}
+
+func (c Client) HandleIncomingFileChoice() (common.Acknowledgement, error){
+	//TODO: handle logic regarding giving user choice to donwload or refuse sent file
+	return common.Acknowledgement{Type: common.Ack, Status: common.Ready}, nil
 }
 
 func (c Client) ExtractFileMetaData(file *os.File) (common.FileHeader, error) {
