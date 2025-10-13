@@ -79,6 +79,12 @@ func (c Client) PrintIncomingMessages() {
 			go func() {
 				c.AckChan <- a.Status
 			}()
+		case common.FileMetaData:
+			var f common.FileHeader
+			json.Unmarshal(b, &f)
+			go func(){
+				c.HandleIncomingFileHeader(f)
+			}()
 		default:
 			var m common.Message
 			json.Unmarshal(b, &m)
@@ -199,7 +205,12 @@ func (c Client) HandleSendFileHeader(filename string) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
+}
+
+func (c Client) HandleIncomingFileHeader(f common.FileHeader){
+	fmt.Println(f)
 }
 
 func (c Client) ExtractFileMetaData(file *os.File) (common.FileHeader, error) {
@@ -209,6 +220,8 @@ func (c Client) ExtractFileMetaData(file *os.File) (common.FileHeader, error) {
 	}
 
 	newFileHeader := common.FileHeader{
+		Type: common.FileMetaData,
+		From: c.name,
 		Filename: fileInfo.Name(),
 		FileSize: fileInfo.Size(),
 	}

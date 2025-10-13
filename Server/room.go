@@ -10,6 +10,7 @@ func (r Room) StartRoom() {
 	go r.RouteRawMessages()
 	go r.HandleAdminSignals()
 	go r.HandleChatMessages()
+	go r.HandleFileHeaders()
 }
 
 func (r Room) RouteRawMessages() {

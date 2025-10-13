@@ -40,6 +40,7 @@ func (h Hub) Start() {
 			leaveChannel:     make(chan ClientModel),
 			broadcastChannel: make(chan common.Message),
 			whisperChannel:   make(chan common.Message),
+			fileHeaderChannel: make(chan common.FileHeader),
 		}
 
 		h.roomMap[i] = &newRoom
@@ -55,9 +56,8 @@ func (h Hub) Start() {
 		}
 		slog.Info("new client connection established", "conn", conn)
 
-		h.HandleNewClientConnection(conn)
+		go h.HandleNewClientConnection(conn)
 
-		go h.RecieveClientMessages(conn)
 	}
 }
 
@@ -81,6 +81,8 @@ func (h Hub) HandleNewClientConnection(conn net.Conn) {
 	}()
 
 	h.clientRoomMap[conn] = room
+
+	go h.RecieveClientMessages(conn) //start recieving client messages
 }
 
 func (h Hub) HandleClientInfoMessage(conn net.Conn) (string, error) {
@@ -152,12 +154,13 @@ func (h Hub) HandleIncomingFileStream(conn net.Conn, f common.FileHeader, r *Roo
 	conn.Write(b)
 
 	//stream bytes
+	
 
 	//reroute bytes to room
 
 	filename := f.Filename
 	filesize := f.FileSize
-
+	fmt.Println("here")
 	newFile, err := os.Create(fmt.Sprintf("server-downloads/(server)%s", filename))
 	if err != nil {
 		return err
