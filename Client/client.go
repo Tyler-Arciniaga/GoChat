@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -56,11 +55,9 @@ func (c Client) HandleIncomingMessages() {
 	for {
 		n, err := c.conn.Read(buf)
 		if err != nil {
-			// slog.Error("client conn read error", "err", err)
 			c.ErrorChan <- err
 			return
 		}
-
 		c.MailBoxChan <- buf[:n]
 	}
 }
@@ -68,9 +65,9 @@ func (c Client) HandleIncomingMessages() {
 func (c Client) PrintIncomingMessages() {
 	var e common.Envelope
 	for b := range c.MailBoxChan {
-		err := json.Unmarshal(b, &e)
+		err := json.Unmarshal(b, &e) //TODO error sending file data chunks is here!!!
 		if err != nil {
-			// slog.Error("error unmarshalling incoming message", "error", err)
+			slog.Error("error unmarshalling incoming message", "error", err)
 			c.ErrorChan <- err
 			return
 		}
@@ -90,7 +87,8 @@ func (c Client) PrintIncomingMessages() {
 		case common.FileData:
 			fmt.Println("recieved some file data")
 			var d common.FileDataChunk
-			json.Unmarshal(b, &d)
+			err := json.Unmarshal(b, &d)
+			fmt.Println("error", err)
 			c.FileDataChan <- d
 		default:
 			var m common.Message
@@ -117,11 +115,14 @@ func (c Client) SendMessages() {
 				continue
 			}
 			if line[0] == byte('/') {
-				newMessage, err = c.ParseCommandMessage(string(line)) //TODO: make interface for all client messages (chats, leave signals, file transfers, etc)
+				newMessage, err = c.ParseCommandMessage(string(line)) //TODO: make interface for all client messages (chats, leave signals, file transfers, etc) instead of using any type
 				if err != nil {
 					// slog.Error("error parsing command message from client", "error", err)
 					continue
 				}
+				if newMessage == nil {
+					continue
+				} // newMessage = nil when user sends file
 			} else {
 				newMessage = common.Message{Type: common.Broadcast, From: c.name, Msg: string(line)}
 			}
@@ -193,22 +194,23 @@ func (c Client) SendFileData(filename string) error {
 	// 	return err
 	// }
 	var chunk_size int64 //TODO experiment with different chunk size (maybe try speed with go testing package)
-	var buf bytes.Buffer
 
 	chunk_size = 1000 //1000 bytes
+	buf := make([]byte, chunk_size)
 	for {
-		_, err := io.CopyN(file, &buf, chunk_size)
-		if err != nil && err != io.EOF {
-			return err
+		_, read_err := file.Read(buf)
+		if read_err != nil && read_err != io.EOF {
+			return read_err
 		}
-		newDataChunk := common.FileDataChunk{Type: common.FileData, From: c.name, DataChunk: buf, IsLast: err == io.EOF}
+		newDataChunk := common.FileDataChunk{Type: common.FileData, From: c.name, DataChunk: buf, IsLast: read_err == io.EOF}
 		b, err := json.Marshal(newDataChunk)
 		if err != nil {
 			return err
 		}
-
+		length := int32(len(b))
+		binary.Write(c.conn, binary.BigEndian, length)
 		c.conn.Write(b)
-		if err == io.EOF {
+		if read_err == io.EOF {
 			break
 		}
 	}
@@ -236,6 +238,9 @@ func (c Client) HandleSendFileHeader(filename string) error {
 	}
 
 	b, _ := json.Marshal(fileHeader)
+	length := int32(len(b))
+	binary.Write(c.conn, binary.BigEndian, length)
+
 	_, err = c.conn.Write(b)
 
 	if err != nil {
@@ -266,9 +271,10 @@ func (c Client) HandleIncomingFileData(f common.FileHeader) {
 		return
 	}
 	defer newFile.Close()
-
+	fmt.Println("before readign from file data chan")
 	for chunk := range c.FileDataChan {
-		_, err := io.Copy(newFile, &chunk.DataChunk)
+		fmt.Println("here with it")
+		_, err := newFile.Write(chunk.DataChunk)
 		if err != nil {
 			slog.Error("error writing from incoming data chunk to local file copy", "err", err)
 			return
@@ -277,6 +283,7 @@ func (c Client) HandleIncomingFileData(f common.FileHeader) {
 			break
 		}
 	}
+	fmt.Println("wtf")
 
 }
 

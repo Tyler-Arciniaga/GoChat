@@ -1,7 +1,6 @@
 package common
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 )
@@ -57,10 +56,10 @@ type FileHeader struct {
 }
 
 type FileDataChunk struct {
-	Type      MessageType  `json:"type"`
-	From      string       `json:"from"`
-	DataChunk bytes.Buffer `json:"data_chunk"`
-	IsLast    bool         `json:"is_last"`
+	Type      MessageType `json:"type"`
+	From      string      `json:"from"`
+	DataChunk []byte      `json:"data_chunk"`
+	IsLast    bool        `json:"is_last"`
 }
 
 type Envelope struct {
