@@ -143,9 +143,10 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 				h.HandleIncomingFileHeader(conn, f, room)
 			}()
 		case common.FileData:
-			fmt.Println("handle file data stream") //TODO
+			// fmt.Println("handle file data stream") //TODO
 			var d common.FileDataChunk
 			json.Unmarshal(buf, &d)
+			// fmt.Println("hehe", d)
 			h.HandleIncomingFileStream(conn, d, room)
 		default:
 			var m common.Message
@@ -206,8 +207,7 @@ func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
 		slog.Error("error marshalling room select message", "error", err)
 	}
 
-	conn.Write(roomChoiceBytes)
-
+	h.WriteDirectClientMessage(conn, roomChoiceBytes)
 	var msgLength int32
 	var msg common.Message
 	for {
@@ -223,7 +223,7 @@ func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
 		json.Unmarshal(buf, &msg)
 		choice, err := strconv.Atoi(msg.Msg)
 		if err != nil {
-			conn.Write(invalidChoiceBytes)
+			h.WriteDirectClientMessage(conn, invalidChoiceBytes)
 			continue
 		}
 		if choice == -1 {
@@ -240,6 +240,15 @@ func (h Hub) HandleRoomSelect(conn net.Conn) (*Room, error) {
 	}
 }
 
+func (h Hub) WriteDirectClientMessage(conn net.Conn, marshalledMsg []byte) error {
+	byteLength := int32(len(marshalledMsg))
+	err := binary.Write(conn, binary.BigEndian, byteLength)
+	if err != nil {
+		return err
+	}
+	conn.Write(marshalledMsg)
+	return nil
+}
 func (h Hub) CleanUpHub() {
 	for _, r := range h.roomMap {
 		r.CleanUpRoom()

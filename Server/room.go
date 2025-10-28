@@ -95,14 +95,15 @@ func (r Room) HandleFileHeaders() {
 	}
 }
 
-func (r Room) HandleFileDataStream(){
+func (r Room) HandleFileDataStream() {
 	for d := range r.fileDataChannel {
+		fmt.Println(d.IsLast)
 		b, _ := json.Marshal(d)
-		for name, conn := range r.chatterMap{
-			if name == d.From{
+		for name, conn := range r.chatterMap {
+			if name == d.From {
 				continue
 			}
-			go func(){
+			go func() {
 				conn.Write(b)
 			}()
 		}

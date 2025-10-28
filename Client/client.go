@@ -51,14 +51,22 @@ func (c Client) SendClientInfo() {
 }
 
 func (c Client) HandleIncomingMessages() {
-	buf := make([]byte, 1024)
+	var msgLength int32 // TODO need hub and room to prefix message with message length the same way client does
 	for {
-		n, err := c.conn.Read(buf)
+		if err := binary.Read(c.conn, binary.BigEndian, &msgLength); err != nil {
+			return
+		}
+		fmt.Println(msgLength)
+		buf := make([]byte, msgLength)
+		fmt.Println(string(buf))
+
+		_, err := io.ReadFull(c.conn, buf)
 		if err != nil {
 			c.ErrorChan <- err
 			return
 		}
-		c.MailBoxChan <- buf[:n]
+		fmt.Println("jasdflkjdas")
+		c.MailBoxChan <- buf
 	}
 }
 
