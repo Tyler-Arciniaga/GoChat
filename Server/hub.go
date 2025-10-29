@@ -146,7 +146,6 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 			// fmt.Println("handle file data stream") //TODO
 			var d common.FileDataChunk
 			json.Unmarshal(buf, &d)
-			// fmt.Println("hehe", d)
 			h.HandleIncomingFileStream(conn, d, room)
 		default:
 			var m common.Message
@@ -163,7 +162,7 @@ func (h Hub) HandleIncomingFileHeader(conn net.Conn, f common.FileHeader, r *Roo
 	//send ack message
 	ackMessage := common.Acknowledgement{Type: common.Ack, Status: common.Ready} //TODO: improve ack logic
 	b, _ := json.Marshal(ackMessage)
-	conn.Write(b)
+	h.WriteDirectClientMessage(conn, b)
 
 	// filename := f.Filename
 	// filesize := f.FileSize
@@ -184,7 +183,6 @@ func (h Hub) HandleIncomingFileHeader(conn net.Conn, f common.FileHeader, r *Roo
 
 func (h Hub) HandleIncomingFileStream(conn net.Conn, d common.FileDataChunk, r *Room) error {
 	r.fileDataChannel <- d
-	//TODO: more internal logic about successful file transfer being returned to sender client
 	return nil
 }
 
@@ -249,6 +247,7 @@ func (h Hub) WriteDirectClientMessage(conn net.Conn, marshalledMsg []byte) error
 	conn.Write(marshalledMsg)
 	return nil
 }
+
 func (h Hub) CleanUpHub() {
 	for _, r := range h.roomMap {
 		r.CleanUpRoom()

@@ -56,16 +56,13 @@ func (c Client) HandleIncomingMessages() {
 		if err := binary.Read(c.conn, binary.BigEndian, &msgLength); err != nil {
 			return
 		}
-		fmt.Println(msgLength)
 		buf := make([]byte, msgLength)
-		fmt.Println(string(buf))
 
 		_, err := io.ReadFull(c.conn, buf)
 		if err != nil {
 			c.ErrorChan <- err
 			return
 		}
-		fmt.Println("jasdflkjdas")
 		c.MailBoxChan <- buf
 	}
 }
@@ -93,10 +90,11 @@ func (c Client) PrintIncomingMessages() {
 				c.HandleIncomingFileHeader(f)
 			}()
 		case common.FileData:
-			fmt.Println("recieved some file data")
 			var d common.FileDataChunk
 			err := json.Unmarshal(b, &d)
-			fmt.Println("error", err)
+			if err != nil {
+				slog.Error("error unmarshalling incoming file data", "err", err)
+			}
 			c.FileDataChan <- d
 		default:
 			var m common.Message
@@ -206,18 +204,21 @@ func (c Client) SendFileData(filename string) error {
 	chunk_size = 1000 //1000 bytes
 	buf := make([]byte, chunk_size)
 	for {
-		_, read_err := file.Read(buf)
+		n, read_err := file.Read(buf)
+		chunk := buf[:n]
+		if n > 0 {
+			newDataChunk := common.FileDataChunk{Type: common.FileData, From: c.name, DataChunk: chunk, IsLast: read_err == io.EOF}
+			b, err := json.Marshal(newDataChunk)
+			if err != nil {
+				return err
+			}
+			length := int32(len(b))
+			binary.Write(c.conn, binary.BigEndian, length)
+			c.conn.Write(b)
+		}
 		if read_err != nil && read_err != io.EOF {
 			return read_err
 		}
-		newDataChunk := common.FileDataChunk{Type: common.FileData, From: c.name, DataChunk: buf, IsLast: read_err == io.EOF}
-		b, err := json.Marshal(newDataChunk)
-		if err != nil {
-			return err
-		}
-		length := int32(len(b))
-		binary.Write(c.conn, binary.BigEndian, length)
-		c.conn.Write(b)
 		if read_err == io.EOF {
 			break
 		}
@@ -273,25 +274,30 @@ func (c Client) HandleIncomingFileHeader(f common.FileHeader) {
 
 func (c Client) HandleIncomingFileData(f common.FileHeader) {
 	filename := f.Filename
-	newFile, err := os.Create(fmt.Sprintf("client-downloads/(%s)%s", c.name, filename))
+	newFilename := fmt.Sprintf("client-downloads/(%s)%s", c.name, filename)
+	if _, err := os.Stat(newFilename); err == nil {
+		fmt.Println("deleting old file")
+		os.Remove(newFilename)
+	}
+	newFile, err := os.Create(newFilename)
 	if err != nil {
 		slog.Error("error creating new file based on incoming file header", "err", err)
 		return
 	}
 	defer newFile.Close()
-	fmt.Println("before readign from file data chan")
+
 	for chunk := range c.FileDataChan {
-		fmt.Println("here with it")
 		_, err := newFile.Write(chunk.DataChunk)
 		if err != nil {
 			slog.Error("error writing from incoming data chunk to local file copy", "err", err)
 			return
 		}
 		if chunk.IsLast {
+			fmt.Println(string(chunk.DataChunk))
+			fmt.Println("ending file chunk")
 			break
 		}
 	}
-	fmt.Println("wtf")
 
 }
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	common "go-chat/Common"
+	"net"
 )
 
 func (r Room) StartRoom() {
@@ -85,27 +87,27 @@ func (r Room) HandleFileHeaders() {
 	for f := range r.fileHeaderChannel {
 		b, _ := json.Marshal(f)
 		for name, conn := range r.chatterMap {
-			if name == f.From {
-				continue
+			if name != f.From {
+				go func() {
+					r.SendLengthPrefixMessage(conn, b)
+					conn.Write(b)
+				}()
 			}
-			go func() {
-				conn.Write(b)
-			}()
 		}
+		fmt.Println("4")
 	}
 }
 
 func (r Room) HandleFileDataStream() {
 	for d := range r.fileDataChannel {
-		fmt.Println(d.IsLast)
 		b, _ := json.Marshal(d)
 		for name, conn := range r.chatterMap {
-			if name == d.From {
-				continue
+			if name != d.From {
+				go func() {
+					r.SendLengthPrefixMessage(conn, b)
+					conn.Write(b)
+				}()
 			}
-			go func() {
-				conn.Write(b)
-			}()
 		}
 	}
 }
@@ -114,6 +116,7 @@ func (r Room) BroadcastMessage(m common.Message) {
 	b, _ := json.Marshal(m)
 	for _, conn := range r.chatterMap {
 		go func() {
+			r.SendLengthPrefixMessage(conn, b)
 			conn.Write(b)
 		}()
 	}
@@ -127,12 +130,24 @@ func (r Room) WhisperMessage(m common.Message) {
 		if !ok {
 			serverMessage := common.Message{Type: common.ServerMessage, From: "Server", Msg: "the person you are trying to whisper does not exist"}
 			b, _ := json.Marshal(serverMessage)
+			r.SendLengthPrefixMessage(srcConn, b)
 			srcConn.Write(b)
 			return
 		}
 
+		r.SendLengthPrefixMessage(dstConn, b)
 		dstConn.Write(b)
 	}()
+}
+
+func (r Room) SendLengthPrefixMessage(conn net.Conn, marshalledMsg []byte) error {
+	byteLength := int32(len(marshalledMsg))
+	err := binary.Write(conn, binary.BigEndian, byteLength)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r Room) CleanUpRoom() {
