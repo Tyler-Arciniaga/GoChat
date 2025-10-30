@@ -147,6 +147,10 @@ func (h Hub) RecieveClientMessages(conn net.Conn) {
 			var d common.FileDataChunk
 			json.Unmarshal(buf, &d)
 			h.HandleIncomingFileStream(conn, d, room)
+			if d.IsLast == true {
+				go h.RecieveClientMessages(conn)
+				return
+			}
 		default:
 			var m common.Message
 			json.Unmarshal(buf, &m)

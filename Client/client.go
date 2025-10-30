@@ -67,7 +67,7 @@ func (c Client) HandleIncomingMessages() {
 	}
 }
 
-func (c Client) PrintIncomingMessages() {
+func (c Client) PrintIncomingMessages() { //TODO for some reason after file transfer cannot recieve messages even though they are sent by hub
 	var e common.Envelope
 	for b := range c.MailBoxChan {
 		err := json.Unmarshal(b, &e) //TODO error sending file data chunks is here!!!
@@ -76,20 +76,24 @@ func (c Client) PrintIncomingMessages() {
 			c.ErrorChan <- err
 			return
 		}
+		fmt.Println("here")
 		switch e.Type {
 		case common.Ack:
+			fmt.Println("1")
 			var a common.Acknowledgement
 			json.Unmarshal(b, &a)
 			go func() {
 				c.AckChan <- a.Status
 			}()
 		case common.FileMetaData:
+			fmt.Println("2")
 			var f common.FileHeader
 			json.Unmarshal(b, &f)
 			go func() {
 				c.HandleIncomingFileHeader(f)
 			}()
 		case common.FileData:
+			fmt.Println("3")
 			var d common.FileDataChunk
 			err := json.Unmarshal(b, &d)
 			if err != nil {
@@ -97,6 +101,7 @@ func (c Client) PrintIncomingMessages() {
 			}
 			c.FileDataChan <- d
 		default:
+			fmt.Println("4")
 			var m common.Message
 			json.Unmarshal(b, &m)
 			fmt.Println(m)
@@ -121,6 +126,7 @@ func (c Client) SendMessages() {
 				continue
 			}
 			if line[0] == byte('/') {
+				fmt.Println("hereyyyy")
 				newMessage, err = c.ParseCommandMessage(string(line)) //TODO: make interface for all client messages (chats, leave signals, file transfers, etc) instead of using any type
 				if err != nil {
 					// slog.Error("error parsing command message from client", "error", err)
@@ -130,6 +136,8 @@ func (c Client) SendMessages() {
 					continue
 				} // newMessage = nil when user sends file
 			} else {
+				fmt.Println("xxx")
+				fmt.Println(string(line))
 				newMessage = common.Message{Type: common.Broadcast, From: c.name, Msg: string(line)}
 			}
 			marshalledMsg, err := json.Marshal(newMessage)
@@ -169,7 +177,7 @@ func (c Client) ParseCommandMessage(line string) (any, error) {
 	default:
 		return nil, errors.New("error parsing client command line: invalid command")
 	}
-	return nil, errors.New("error parsing client command line: invalid command")
+	return nil, nil
 }
 
 func (c Client) HandleFileTransfer(filename string) error {
@@ -203,18 +211,20 @@ func (c Client) SendFileData(filename string) error {
 
 	chunk_size = 1000 //1000 bytes
 	buf := make([]byte, chunk_size)
+	chunkNum := 0
 	for {
 		n, read_err := file.Read(buf)
-		chunk := buf[:n]
-		if n > 0 {
-			newDataChunk := common.FileDataChunk{Type: common.FileData, From: c.name, DataChunk: chunk, IsLast: read_err == io.EOF}
-			b, err := json.Marshal(newDataChunk)
-			if err != nil {
-				return err
-			}
-			length := int32(len(b))
-			binary.Write(c.conn, binary.BigEndian, length)
-			c.conn.Write(b)
+		chunkNum++
+		newDataChunk := common.FileDataChunk{Type: common.FileData, ChunkNum: chunkNum, From: c.name, DataChunk: buf[:n], IsLast: read_err == io.EOF}
+		b, err := json.Marshal(newDataChunk)
+		if err != nil {
+			return err
+		}
+		length := int32(len(b))
+		binary.Write(c.conn, binary.BigEndian, length)
+		c.conn.Write(b)
+		if newDataChunk.IsLast {
+			fmt.Println("last sent")
 		}
 		if read_err != nil && read_err != io.EOF {
 			return read_err
@@ -224,13 +234,6 @@ func (c Client) SendFileData(filename string) error {
 		}
 	}
 
-	// //fileData := common.FileDataStream{Type: common.FileData, From: c.name, Data: buf}
-	// b, err := json.Marshal(fileData)
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// c.conn.Write(b)
 	return nil
 }
 

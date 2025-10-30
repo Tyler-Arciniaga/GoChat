@@ -57,6 +57,7 @@ type FileHeader struct {
 
 type FileDataChunk struct {
 	Type      MessageType `json:"type"`
+	ChunkNum  int         `json:"num"`
 	From      string      `json:"from"`
 	DataChunk []byte      `json:"data_chunk"`
 	IsLast    bool        `json:"is_last"`

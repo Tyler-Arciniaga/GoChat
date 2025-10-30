@@ -94,7 +94,6 @@ func (r Room) HandleFileHeaders() {
 				}()
 			}
 		}
-		fmt.Println("4")
 	}
 }
 
@@ -103,10 +102,8 @@ func (r Room) HandleFileDataStream() {
 		b, _ := json.Marshal(d)
 		for name, conn := range r.chatterMap {
 			if name != d.From {
-				go func() {
-					r.SendLengthPrefixMessage(conn, b)
-					conn.Write(b)
-				}()
+				r.SendLengthPrefixMessage(conn, b)
+				conn.Write(b)
 			}
 		}
 	}
