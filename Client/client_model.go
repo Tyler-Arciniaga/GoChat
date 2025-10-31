@@ -7,6 +7,7 @@ import (
 
 type Client struct {
 	name         string
+	ip           string
 	conn         net.Conn
 	MailBoxChan  chan []byte
 	ErrorChan    chan error

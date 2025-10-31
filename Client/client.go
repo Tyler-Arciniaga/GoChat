@@ -22,7 +22,7 @@ func (c Client) StartClient() {
 			c.CleanUpClient()
 		}
 	}()
-	conn, err := net.Dial("tcp", "localhost:9090")
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:9090", c.ip))
 	if err != nil {
 		fmt.Println("error connecting to chat server:", err)
 		return
