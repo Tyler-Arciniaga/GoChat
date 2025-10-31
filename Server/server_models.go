@@ -15,13 +15,15 @@ type Hub struct {
 }
 
 type Room struct {
-	roomID           int
-	chatterMap       map[string]net.Conn
-	messageChannel   chan common.Message //recieves raw unparsed messages from hub, routes to appropriate internal channel
-	joinChannel      chan ClientModel
-	leaveChannel     chan ClientModel
-	broadcastChannel chan common.Message
-	whisperChannel   chan common.Message
+	roomID            int
+	chatterMap        map[string]net.Conn
+	messageChannel    chan common.Message //recieves raw unparsed messages from hub, routes to appropriate internal channel
+	joinChannel       chan ClientModel
+	leaveChannel      chan ClientModel
+	broadcastChannel  chan common.Message
+	whisperChannel    chan common.Message
+	fileHeaderChannel chan common.FileHeader
+	fileDataChannel   chan common.FileDataChunk
 }
 
 type ClientModel struct {
