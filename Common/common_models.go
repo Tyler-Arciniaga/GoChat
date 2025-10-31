@@ -27,7 +27,7 @@ const (
 )
 
 type Message struct {
-	Type MessageType `json:"message_type"`
+	Type MessageType `json:"type"`
 	From string      `json:"name"`
 	To   string      `json:"to"` //empty string unless /whisper command evoked
 	Msg  string      `json:"msg"`
@@ -57,7 +57,7 @@ type FileHeader struct {
 
 type FileDataChunk struct {
 	Type      MessageType `json:"type"`
-	ChunkNum  int         `json:"num"`
+	ChunkNum  int         `json:"chunk_num"`
 	From      string      `json:"from"`
 	DataChunk []byte      `json:"data_chunk"`
 	IsLast    bool        `json:"is_last"`

@@ -43,7 +43,6 @@ func (c Client) SendClientInfo() {
 	userInfoMsg := common.Message{Type: common.UserData, From: c.name}
 	bytes, err := json.Marshal(userInfoMsg)
 	if err != nil {
-		// slog.Error("error marshalling user info message")
 		return
 	}
 
@@ -51,7 +50,7 @@ func (c Client) SendClientInfo() {
 }
 
 func (c Client) HandleIncomingMessages() {
-	var msgLength int32 // TODO need hub and room to prefix message with message length the same way client does
+	var msgLength int32
 	for {
 		if err := binary.Read(c.conn, binary.BigEndian, &msgLength); err != nil {
 			return
@@ -67,33 +66,29 @@ func (c Client) HandleIncomingMessages() {
 	}
 }
 
-func (c Client) PrintIncomingMessages() { //TODO for some reason after file transfer cannot recieve messages even though they are sent by hub
+func (c Client) PrintIncomingMessages() {
 	var e common.Envelope
 	for b := range c.MailBoxChan {
-		err := json.Unmarshal(b, &e) //TODO error sending file data chunks is here!!!
+		err := json.Unmarshal(b, &e)
 		if err != nil {
 			slog.Error("error unmarshalling incoming message", "error", err)
 			c.ErrorChan <- err
 			return
 		}
-		fmt.Println("here")
 		switch e.Type {
 		case common.Ack:
-			fmt.Println("1")
 			var a common.Acknowledgement
 			json.Unmarshal(b, &a)
 			go func() {
 				c.AckChan <- a.Status
 			}()
 		case common.FileMetaData:
-			fmt.Println("2")
 			var f common.FileHeader
 			json.Unmarshal(b, &f)
 			go func() {
 				c.HandleIncomingFileHeader(f)
 			}()
 		case common.FileData:
-			fmt.Println("3")
 			var d common.FileDataChunk
 			err := json.Unmarshal(b, &d)
 			if err != nil {
@@ -101,7 +96,6 @@ func (c Client) PrintIncomingMessages() { //TODO for some reason after file tran
 			}
 			c.FileDataChan <- d
 		default:
-			fmt.Println("4")
 			var m common.Message
 			json.Unmarshal(b, &m)
 			fmt.Println(m)
@@ -126,7 +120,6 @@ func (c Client) SendMessages() {
 				continue
 			}
 			if line[0] == byte('/') {
-				fmt.Println("hereyyyy")
 				newMessage, err = c.ParseCommandMessage(string(line)) //TODO: make interface for all client messages (chats, leave signals, file transfers, etc) instead of using any type
 				if err != nil {
 					// slog.Error("error parsing command message from client", "error", err)
@@ -136,8 +129,6 @@ func (c Client) SendMessages() {
 					continue
 				} // newMessage = nil when user sends file
 			} else {
-				fmt.Println("xxx")
-				fmt.Println(string(line))
 				newMessage = common.Message{Type: common.Broadcast, From: c.name, Msg: string(line)}
 			}
 			marshalledMsg, err := json.Marshal(newMessage)
@@ -223,9 +214,7 @@ func (c Client) SendFileData(filename string) error {
 		length := int32(len(b))
 		binary.Write(c.conn, binary.BigEndian, length)
 		c.conn.Write(b)
-		if newDataChunk.IsLast {
-			fmt.Println("last sent")
-		}
+
 		if read_err != nil && read_err != io.EOF {
 			return read_err
 		}
@@ -263,7 +252,8 @@ func (c Client) HandleSendFileHeader(filename string) error {
 }
 
 func (c Client) HandleIncomingFileHeader(f common.FileHeader) {
-	fmt.Printf("User (%s) is trying to send you a file. Accept and download file? Y/N\n", f.From)
+	fmt.Printf("User (%s) is sending you a file. Please wait...\n", f.From)
+	// fmt.Printf("User (%s) is trying to send you a file. Accept and download file? Y/N\n", f.From)
 	ack, err := c.HandleIncomingFileChoice()
 	if err != nil || ack.Status != common.Ready {
 		return
@@ -279,7 +269,6 @@ func (c Client) HandleIncomingFileData(f common.FileHeader) {
 	filename := f.Filename
 	newFilename := fmt.Sprintf("client-downloads/(%s)%s", c.name, filename)
 	if _, err := os.Stat(newFilename); err == nil {
-		fmt.Println("deleting old file")
 		os.Remove(newFilename)
 	}
 	newFile, err := os.Create(newFilename)
@@ -296,8 +285,7 @@ func (c Client) HandleIncomingFileData(f common.FileHeader) {
 			return
 		}
 		if chunk.IsLast {
-			fmt.Println(string(chunk.DataChunk))
-			fmt.Println("ending file chunk")
+			fmt.Println("File has finished downloading!")
 			break
 		}
 	}
@@ -340,76 +328,3 @@ func (c Client) CleanUpClient() {
 	close(c.ErrorChan)
 	fmt.Println("see you soon :)")
 }
-
-// func (c Client) RecieveMessages() {
-// 	for m := range c.MailBoxChan {
-// 		if m.Type == Leave {
-// 			return
-// 		}
-
-// 		var msgString string
-// 		if m.Name == "" {
-// 			msgString = m.Msg
-// 		} else {
-// 			msgString = m.String()
-// 		}
-
-// 		_, err := c.Conn.Write([]byte(msgString))
-// 		if err != nil {
-// 			fmt.Printf("client with name %s had trouble printing incoming message, err: %s\n", c.Name, err)
-// 			once.Do(func() {
-// 				c.HandleDisconnect(leaveChannel, LeaveSignal{LeaveType: Interruption, Client: c})
-// 			})
-// 			return
-// 		}
-// 	}
-// }
-
-// func (c Client) SendMessages() {
-// 	bufferedReader := bufio.NewReader(c.Conn)
-// 	for {
-// 		bytes, err := bufferedReader.ReadBytes(byte('\n')) //function call blocking until delimeter seen
-// 		if err != nil {
-// 			if err != io.EOF {
-// 				fmt.Printf("client with name %s had trouble sending a message: %s\n", c.Name, err)
-// 				once.Do(func() {
-// 					c.HandleDisconnect(leaveChannel, LeaveSignal{LeaveType: Interruption, Client: c})
-// 				})
-// 				return
-// 			}
-// 		}
-// 		msgString := strings.TrimSpace(string(bytes))
-// 		if len(msgString) == 0 {
-// 			continue
-// 		}
-
-// 		if string(msgString[0]) == "/" {
-// 			parsedCommand := strings.Split(msgString[1:], " ")
-// 			//handle if parsed command len == 0
-// 			cmd := parsedCommand[0]
-
-// 			switch cmd {
-// 			case "leave":
-// 				c.HandleDisconnect(leaveChannel, LeaveSignal{LeaveType: Graceful, Client: c})
-// 				return
-// 			case "whisper":
-// 				go func() {
-// 					broadcastChannel <- Message{Type: Whisper, Name: c.Name, To: parsedCommand[1], Msg: strings.Join(parsedCommand[2:], " ")}
-// 				}()
-// 				continue
-// 			case "sendfile":
-// 				fmt.Println("sending file...")
-// 			default:
-// 				continue
-// 			}
-// 		}
-
-// 		newMessage := Message{Type: Broadcast, Name: c.Name, Msg: msgString}
-
-// 		broadcastChannel <- newMessage
-// 	}
-// }
-
-// func (c Client) HandleDisconnect(l chan LeaveSignal, s LeaveSignal) {
-// 	l <- s
-// }
